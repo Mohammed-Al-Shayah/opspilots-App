@@ -1,0 +1,45 @@
+class AppRoutes {
+  const AppRoutes._();
+
+  static const splash = '/';
+  static const onboarding = '/onboarding';
+  static const login = '/login';
+  static const forgotPassword = '/forgot-password';
+  static const otp = '/otp';
+  static const resetPassword = '/reset-password';
+  static const workspace = '/workspace';
+  static const rolePreview = '/role-preview';
+  static const home = '/home';
+  static const settings = '/settings';
+  static const language = '/settings/language';
+  static const notifications = '/notifications';
+  static const liveMap = '/map';
+  static const chat = '/chat';
+  static const chatThread = '/chat/thread';
+  static const profile = '/profile';
+  static const supervisorTeamTasks = '/supervisor/team-tasks';
+  static const supervisorReviews = '/supervisor/reviews';
+  static const supervisorReviewDetails = '/supervisor/reviews/details';
+  static const supervisorTeam = '/supervisor/team';
+  static const operationsReports = '/operations/reports';
+  static const operationsAiCenter = '/operations/ai-center';
+  static const tasks = '/tasks';
+  static const taskFilter = '/tasks/filter';
+  static const taskCalendar = '/tasks/calendar';
+  static const taskDetails = '/tasks/details';
+  static const acceptedTaskDetails = '/tasks/details/accepted';
+  static const activeTaskDetails = '/tasks/details/active';
+  static const acceptTask = '/tasks/accept';
+  static const taskCheckIn = '/tasks/check-in';
+  static const beforePhotos = '/tasks/before-photos';
+  static const materials = '/tasks/materials';
+  static const expenses = '/tasks/expenses';
+  static const addNote = '/tasks/add-note';
+  static const updateStatus = '/tasks/update-status';
+  static const completeTask = '/tasks/complete';
+  static const afterPhotos = '/tasks/after-photos';
+  static const clientSignature = '/tasks/client-signature';
+  static const rateService = '/tasks/rate-service';
+  static const attendance = '/attendance';
+  static const scanQr = '/scan-qr';
+}
