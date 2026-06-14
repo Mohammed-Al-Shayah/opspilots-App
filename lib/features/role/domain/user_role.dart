@@ -1,6 +1,19 @@
 enum UserRole { fieldEmployee, supervisor, operationsManager, client }
 
 extension UserRoleX on UserRole {
+  String get apiValue {
+    switch (this) {
+      case UserRole.fieldEmployee:
+        return 'field_employee';
+      case UserRole.supervisor:
+        return 'supervisor';
+      case UserRole.operationsManager:
+        return 'operations_manager';
+      case UserRole.client:
+        return 'client';
+    }
+  }
+
   String get labelEn {
     switch (this) {
       case UserRole.fieldEmployee:

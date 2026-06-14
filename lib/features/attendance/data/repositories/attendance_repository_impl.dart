@@ -3,23 +3,24 @@ import '../../../../core/network/api_response_reader.dart';
 import '../../../../core/utils/app_result.dart';
 import '../../domain/entities/attendance_record_entity.dart';
 import '../../domain/repositories/attendance_repository.dart';
-import '../attendance_api_service.dart';
+import '../datasources/attendance_remote_datasource.dart';
 import '../models/attendance_record_model.dart';
 
 class AttendanceRepositoryImpl implements AttendanceRepository {
-  const AttendanceRepositoryImpl({required AttendanceApiService apiService})
-    : _apiService = apiService;
+  const AttendanceRepositoryImpl({
+    required AttendanceRemoteDataSource remoteDataSource,
+  }) : _remoteDataSource = remoteDataSource;
 
-  final AttendanceApiService _apiService;
+  final AttendanceRemoteDataSource _remoteDataSource;
 
   @override
   Future<AppResult<List<AttendanceRecordEntity>>> getMyAttendance() async {
-    return _loadList(_apiService.getMyAttendance);
+    return _loadList(_remoteDataSource.getMyAttendance);
   }
 
   @override
   Future<AppResult<List<AttendanceRecordEntity>>> getCompanyAttendance() async {
-    return _loadList(_apiService.getCompanyAttendance);
+    return _loadList(_remoteDataSource.getCompanyAttendance);
   }
 
   @override
@@ -29,7 +30,7 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
     String? notes,
   }) {
     return _postRecord(
-      () => _apiService.checkIn(
+      () => _remoteDataSource.checkIn(
         latitude: latitude,
         longitude: longitude,
         notes: notes,
@@ -44,7 +45,7 @@ class AttendanceRepositoryImpl implements AttendanceRepository {
     String? notes,
   }) {
     return _postRecord(
-      () => _apiService.checkOut(
+      () => _remoteDataSource.checkOut(
         latitude: latitude,
         longitude: longitude,
         notes: notes,

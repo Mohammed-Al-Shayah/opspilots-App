@@ -2,13 +2,13 @@ import '../../../../core/errors/app_failure.dart';
 import '../../../../core/utils/app_result.dart';
 import '../../domain/entities/auth_session_entity.dart';
 import '../../domain/repositories/auth_repository.dart';
-import '../auth_api_service.dart';
+import '../datasources/auth_remote_datasource.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
-  const AuthRepositoryImpl({required AuthApiService apiService})
-    : _apiService = apiService;
+  const AuthRepositoryImpl({required AuthRemoteDataSource remoteDataSource})
+    : _remoteDataSource = remoteDataSource;
 
-  final AuthApiService _apiService;
+  final AuthRemoteDataSource _remoteDataSource;
 
   @override
   Future<AppResult<AuthSessionEntity>> login({
@@ -18,7 +18,7 @@ class AuthRepositoryImpl implements AuthRepository {
     String? fcmToken,
   }) async {
     try {
-      final result = await _apiService.login(
+      final result = await _remoteDataSource.login(
         emailOrPhone: emailOrPhone,
         password: password,
         deviceName: deviceName,
@@ -39,7 +39,7 @@ class AuthRepositoryImpl implements AuthRepository {
   @override
   Future<AppResult<void>> logout() async {
     try {
-      await _apiService.logout();
+      await _remoteDataSource.logout();
       return AppResult.success(null);
     } on AppFailure catch (failure) {
       return AppResult.failure(failure);
@@ -56,7 +56,7 @@ class AuthRepositoryImpl implements AuthRepository {
     required String passwordConfirmation,
   }) async {
     try {
-      await _apiService.setPassword(
+      await _remoteDataSource.setPassword(
         email: email,
         token: token,
         password: password,

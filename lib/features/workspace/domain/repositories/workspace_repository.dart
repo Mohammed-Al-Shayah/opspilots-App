@@ -1,4 +1,5 @@
 import '../../../../core/utils/app_result.dart';
+import '../../../role/domain/user_role.dart';
 import '../entities/workspace_entity.dart';
 
 abstract class WorkspaceRepository {
@@ -6,7 +7,8 @@ abstract class WorkspaceRepository {
 
   Future<AppResult<WorkspaceEntity?>> selectWorkspace({
     required WorkspaceEntity workspace,
-    required int roleId,
+    required UserRole role,
+    int? roleId,
   });
 
   Future<AppResult<WorkspaceEntity?>> getCurrentWorkspace();

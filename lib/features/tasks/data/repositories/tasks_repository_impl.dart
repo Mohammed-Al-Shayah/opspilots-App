@@ -4,19 +4,35 @@ import '../../../../core/utils/app_result.dart';
 import '../../domain/entities/task_transition.dart';
 import '../../domain/repositories/tasks_repository.dart';
 import '../../domain/entities/task_item.dart';
+import '../datasources/tasks_remote_datasource.dart';
 import '../models/task_model.dart';
-import '../tasks_api_service.dart';
 
 class TasksRepositoryImpl implements TasksRepository {
-  const TasksRepositoryImpl({required TasksApiService apiService})
-    : _apiService = apiService;
+  const TasksRepositoryImpl({required TasksRemoteDataSource remoteDataSource})
+    : _remoteDataSource = remoteDataSource;
 
-  final TasksApiService _apiService;
+  final TasksRemoteDataSource _remoteDataSource;
 
   @override
   Future<AppResult<List<TaskItem>>> getMyTasks() async {
     try {
-      final rawTasks = await _apiService.getMyTasks();
+      final rawTasks = await _remoteDataSource.getMyTasks();
+      final tasks = rawTasks
+          .map(ApiResponseReader.asMap)
+          .map(TaskModel.fromJson)
+          .toList();
+      return AppResult.success(tasks);
+    } on AppFailure catch (failure) {
+      return AppResult.failure(failure);
+    } on Object catch (error) {
+      return AppResult.failure(ParsingFailure(error.toString()));
+    }
+  }
+
+  @override
+  Future<AppResult<List<TaskItem>>> getTasks() async {
+    try {
+      final rawTasks = await _remoteDataSource.getTasks();
       final tasks = rawTasks
           .map(ApiResponseReader.asMap)
           .map(TaskModel.fromJson)
@@ -32,7 +48,7 @@ class TasksRepositoryImpl implements TasksRepository {
   @override
   Future<AppResult<TaskItem>> getTaskDetails(String taskId) async {
     try {
-      final data = await _apiService.getTaskDetails(taskId);
+      final data = await _remoteDataSource.getTaskDetails(taskId);
       final taskMap = ApiResponseReader.asMap(data['task'] ?? data);
       return AppResult.success(TaskModel.fromJson(taskMap));
     } on AppFailure catch (failure) {
@@ -53,7 +69,7 @@ class TasksRepositoryImpl implements TasksRepository {
     double? longitude,
   }) async {
     try {
-      final response = await _apiService.transition(
+      final response = await _remoteDataSource.transition(
         taskId,
         transition,
         note: note,
@@ -76,6 +92,48 @@ class TasksRepositoryImpl implements TasksRepository {
       return AppResult.success(
         fallback.copyWith(status: _statusForTransition(transition)),
       );
+    } on AppFailure catch (failure) {
+      return AppResult.failure(failure);
+    } on Object catch (error) {
+      return AppResult.failure(ParsingFailure(error.toString()));
+    }
+  }
+
+  @override
+  Future<AppResult<void>> addNote(String taskId, Map<String, dynamic> payload) {
+    return _postAction(() => _remoteDataSource.addNote(taskId, payload));
+  }
+
+  @override
+  Future<AppResult<void>> addMaterial(
+    String taskId,
+    Map<String, dynamic> payload,
+  ) {
+    return _postAction(() => _remoteDataSource.addMaterial(taskId, payload));
+  }
+
+  @override
+  Future<AppResult<void>> addExpense(
+    String taskId,
+    Map<String, dynamic> payload,
+  ) {
+    return _postAction(() => _remoteDataSource.addExpense(taskId, payload));
+  }
+
+  @override
+  Future<AppResult<void>> addRating(
+    String taskId,
+    Map<String, dynamic> payload,
+  ) {
+    return _postAction(() => _remoteDataSource.addRating(taskId, payload));
+  }
+
+  Future<AppResult<void>> _postAction(
+    Future<Map<String, dynamic>> Function() request,
+  ) async {
+    try {
+      await request();
+      return AppResult.success(null);
     } on AppFailure catch (failure) {
       return AppResult.failure(failure);
     } on Object catch (error) {

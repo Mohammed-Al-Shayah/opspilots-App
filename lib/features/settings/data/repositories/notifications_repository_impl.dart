@@ -3,20 +3,20 @@ import '../../../../core/network/api_response_reader.dart';
 import '../../../../core/utils/app_result.dart';
 import '../../domain/entities/notification_entity.dart';
 import '../../domain/repositories/notifications_repository.dart';
+import '../datasources/notifications_remote_datasource.dart';
 import '../models/notification_model.dart';
-import '../notifications_api_service.dart';
 
 class NotificationsRepositoryImpl implements NotificationsRepository {
   const NotificationsRepositoryImpl({
-    required NotificationsApiService apiService,
-  }) : _apiService = apiService;
+    required NotificationsRemoteDataSource remoteDataSource,
+  }) : _remoteDataSource = remoteDataSource;
 
-  final NotificationsApiService _apiService;
+  final NotificationsRemoteDataSource _remoteDataSource;
 
   @override
   Future<AppResult<List<NotificationEntity>>> getNotifications() async {
     try {
-      final rows = await _apiService.getNotifications();
+      final rows = await _remoteDataSource.getNotifications();
       return AppResult.success(
         rows
             .map(ApiResponseReader.asMap)
@@ -33,7 +33,7 @@ class NotificationsRepositoryImpl implements NotificationsRepository {
   @override
   Future<AppResult<void>> markAllRead() async {
     try {
-      await _apiService.markAllRead();
+      await _remoteDataSource.markAllRead();
       return AppResult.success(null);
     } on AppFailure catch (failure) {
       return AppResult.failure(failure);
@@ -45,7 +45,7 @@ class NotificationsRepositoryImpl implements NotificationsRepository {
   @override
   Future<AppResult<void>> markRead(String notificationId) async {
     try {
-      await _apiService.markRead(notificationId);
+      await _remoteDataSource.markRead(notificationId);
       return AppResult.success(null);
     } on AppFailure catch (failure) {
       return AppResult.failure(failure);

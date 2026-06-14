@@ -77,36 +77,3 @@ class TaskItem {
     );
   }
 }
-
-const demoTasks = [
-  TaskItem(
-    id: 'T-001',
-    title: 'صيانة نظام التكييف',
-    description: 'فحص وصيانة نظام التكييف المركزي في مبنى الإدارة',
-    client: 'شركة النجاح التجارية',
-    location: 'شارع الملك فهد، الرياض',
-    time: '2026-06-01 - 09:00',
-    status: TaskStatus.pending,
-    priority: TaskPriority.high,
-  ),
-  TaskItem(
-    id: 'T-002',
-    title: 'تركيب كاميرات مراقبة',
-    description: 'تركيب 4 كاميرات مراقبة في المواقع المحددة',
-    client: 'مركز التسوق الكبير',
-    location: 'حي العليا، الرياض',
-    time: '2026-06-01 - 11:00',
-    status: TaskStatus.inProgress,
-    priority: TaskPriority.medium,
-  ),
-  TaskItem(
-    id: 'T-003',
-    title: 'فحص أنظمة الإنذار',
-    description: 'فحص دوري لأنظمة الإنذار والإطفاء',
-    client: 'مستشفى الملك فيصل',
-    location: 'شارع العروبة، الرياض',
-    time: '2026-05-31 - 08:00',
-    status: TaskStatus.completed,
-    priority: TaskPriority.low,
-  ),
-];

@@ -20,6 +20,26 @@ abstract class TasksRemoteDataSource {
     double? latitude,
     double? longitude,
   });
+
+  Future<Map<String, dynamic>> addNote(
+    String taskId,
+    Map<String, dynamic> payload,
+  );
+
+  Future<Map<String, dynamic>> addMaterial(
+    String taskId,
+    Map<String, dynamic> payload,
+  );
+
+  Future<Map<String, dynamic>> addExpense(
+    String taskId,
+    Map<String, dynamic> payload,
+  );
+
+  Future<Map<String, dynamic>> addRating(
+    String taskId,
+    Map<String, dynamic> payload,
+  );
 }
 
 class TasksRemoteDataSourceImpl implements TasksRemoteDataSource {
@@ -66,5 +86,37 @@ class TasksRemoteDataSourceImpl implements TasksRemoteDataSource {
       latitude: latitude,
       longitude: longitude,
     );
+  }
+
+  @override
+  Future<Map<String, dynamic>> addNote(
+    String taskId,
+    Map<String, dynamic> payload,
+  ) {
+    return _apiService.addNote(taskId, payload);
+  }
+
+  @override
+  Future<Map<String, dynamic>> addMaterial(
+    String taskId,
+    Map<String, dynamic> payload,
+  ) {
+    return _apiService.addMaterial(taskId, payload);
+  }
+
+  @override
+  Future<Map<String, dynamic>> addExpense(
+    String taskId,
+    Map<String, dynamic> payload,
+  ) {
+    return _apiService.addExpense(taskId, payload);
+  }
+
+  @override
+  Future<Map<String, dynamic>> addRating(
+    String taskId,
+    Map<String, dynamic> payload,
+  ) {
+    return _apiService.addRating(taskId, payload);
   }
 }

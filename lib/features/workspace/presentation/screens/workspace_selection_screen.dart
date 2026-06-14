@@ -20,6 +20,13 @@ class WorkspaceSelectionScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<WorkspaceCubit>().state;
+    if (state.status == WorkspaceStatus.initial) {
+      Future.microtask(() {
+        if (context.mounted) {
+          context.read<WorkspaceCubit>().loadWorkspaces();
+        }
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Select workspace')),
@@ -46,10 +53,14 @@ class WorkspaceSelectionScreen extends StatelessWidget {
             const SizedBox(height: 18),
             ...state.workspaces.map((workspace) {
               final isSelected = state.selectedWorkspace?.id == workspace.id;
+              final hasRoles = workspace.availableRoles.isNotEmpty;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: AppCard(
                   onTap: () {
+                    if (!hasRoles) {
+                      return;
+                    }
                     context.read<WorkspaceCubit>().selectWorkspace(workspace);
                     final selectedRole = context
                         .read<RoleCubit>()
@@ -72,14 +83,15 @@ class WorkspaceSelectionScreen extends StatelessWidget {
                               style: AppTextStyles.title,
                             ),
                           ),
-                          Icon(
-                            isSelected
-                                ? Icons.check_circle
-                                : Icons.radio_button_off,
-                            color: isSelected
-                                ? AppColors.teal
-                                : AppColors.textSecondary,
-                          ),
+                          if (hasRoles)
+                            Icon(
+                              isSelected
+                                  ? Icons.check_circle
+                                  : Icons.radio_button_off,
+                              color: isSelected
+                                  ? AppColors.teal
+                                  : AppColors.textSecondary,
+                            ),
                         ],
                       ),
                       const SizedBox(height: 6),
@@ -87,18 +99,26 @@ class WorkspaceSelectionScreen extends StatelessWidget {
                       const SizedBox(height: 4),
                       Text(workspace.location, style: AppTextStyles.caption),
                       const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: workspace.availableRoles
-                            .map(
-                              (role) => AppBadge(
-                                label: role.labelEn,
-                                color: AppColors.navy,
-                              ),
-                            )
-                            .toList(),
-                      ),
+                      if (hasRoles)
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: workspace.availableRoles
+                              .map(
+                                (role) => AppBadge(
+                                  label: role.labelEn,
+                                  color: AppColors.navy,
+                                ),
+                              )
+                              .toList(),
+                        )
+                      else
+                        Text(
+                          'No roles are assigned to this workspace.',
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.danger,
+                          ),
+                        ),
                     ],
                   ),
                 ),

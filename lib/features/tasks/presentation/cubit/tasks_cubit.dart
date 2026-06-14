@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../domain/entities/task_transition.dart';
 import '../../domain/usecases/get_my_tasks_usecase.dart';
 import '../../domain/usecases/get_task_details_usecase.dart';
+import '../../domain/usecases/submit_task_workflow_usecase.dart';
 import '../../domain/usecases/transition_task_usecase.dart';
 import '../../domain/entities/task_item.dart';
 
@@ -45,14 +46,17 @@ class TasksCubit extends Cubit<TasksState> {
     required GetMyTasksUseCase getMyTasksUseCase,
     required GetTaskDetailsUseCase getTaskDetailsUseCase,
     required TransitionTaskUseCase transitionTaskUseCase,
+    required SubmitTaskWorkflowUseCase submitTaskWorkflowUseCase,
   }) : _getMyTasksUseCase = getMyTasksUseCase,
        _getTaskDetailsUseCase = getTaskDetailsUseCase,
        _transitionTaskUseCase = transitionTaskUseCase,
+       _submitTaskWorkflowUseCase = submitTaskWorkflowUseCase,
        super(const TasksState());
 
   final GetMyTasksUseCase _getMyTasksUseCase;
   final GetTaskDetailsUseCase _getTaskDetailsUseCase;
   final TransitionTaskUseCase _transitionTaskUseCase;
+  final SubmitTaskWorkflowUseCase _submitTaskWorkflowUseCase;
 
   Future<void> loadMyTasks() async {
     emit(state.copyWith(status: TasksStatus.loading, errorMessage: null));
@@ -132,6 +136,48 @@ class TasksCubit extends Cubit<TasksState> {
     return result.when(
       success: (updatedTask) {
         _replaceSelectedTask(updatedTask);
+        return true;
+      },
+      failure: (failure) {
+        emit(
+          state.copyWith(
+            status: _restoreStatus(previousStatus),
+            errorMessage: failure.message,
+          ),
+        );
+        return false;
+      },
+    );
+  }
+
+  Future<bool> submitWorkflowAction(
+    TaskWorkflowAction action,
+    Map<String, dynamic> payload,
+  ) async {
+    final task = state.selectedTask;
+    if (task == null || task.id.isEmpty) {
+      emit(
+        state.copyWith(
+          status: TasksStatus.loaded,
+          errorMessage: 'No task selected.',
+        ),
+      );
+      return false;
+    }
+
+    final previousStatus = state.status;
+    emit(state.copyWith(status: TasksStatus.actionLoading, errorMessage: null));
+    final result = await _submitTaskWorkflowUseCase(
+      SubmitTaskWorkflowParams(
+        taskId: task.id,
+        action: action,
+        payload: payload,
+      ),
+    );
+
+    return result.when(
+      success: (_) {
+        emit(state.copyWith(status: _restoreStatus(previousStatus)));
         return true;
       },
       failure: (failure) {

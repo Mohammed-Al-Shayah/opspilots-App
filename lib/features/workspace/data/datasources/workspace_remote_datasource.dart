@@ -1,4 +1,5 @@
 import '../workspace_api_service.dart';
+import '../../../role/domain/user_role.dart';
 
 abstract class WorkspaceRemoteDataSource {
   Future<List<dynamic>> getWorkspaces();
@@ -6,7 +7,8 @@ abstract class WorkspaceRemoteDataSource {
   Future<Map<String, dynamic>> selectWorkspace({
     required int companyId,
     int? branchId,
-    required int roleId,
+    required UserRole role,
+    int? roleId,
   });
 
   Future<Map<String, dynamic>> getCurrentWorkspace();
@@ -25,11 +27,13 @@ class WorkspaceRemoteDataSourceImpl implements WorkspaceRemoteDataSource {
   Future<Map<String, dynamic>> selectWorkspace({
     required int companyId,
     int? branchId,
-    required int roleId,
+    required UserRole role,
+    int? roleId,
   }) {
     return _apiService.selectWorkspace(
       companyId: companyId,
       branchId: branchId,
+      role: role,
       roleId: roleId,
     );
   }

@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/router/navigation_extensions.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../tasks/domain/entities/task_item.dart';
 import '../../../tasks/presentation/widgets/field_bottom_nav.dart';
 import '../../../tasks/presentation/widgets/task_card.dart';
 import '../cubit/supervisor_cubit.dart';
@@ -15,6 +14,15 @@ class SupervisorHomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final supervisorState = context.watch<SupervisorCubit>().state;
+    if (supervisorState.status == SupervisorStatus.initial) {
+      Future.microtask(() {
+        if (context.mounted) {
+          context.read<SupervisorCubit>().loadSummary();
+        }
+      });
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -84,7 +92,14 @@ class SupervisorTeamTasksScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final supervisorState = context.watch<SupervisorCubit>().state;
-    final tasks = supervisorState.summary?.teamTasks ?? demoTasks;
+    if (supervisorState.status == SupervisorStatus.initial) {
+      Future.microtask(() {
+        if (context.mounted) {
+          context.read<SupervisorCubit>().loadSummary();
+        }
+      });
+    }
+    final tasks = supervisorState.summary?.teamTasks ?? const [];
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -126,10 +141,13 @@ class SupervisorTeamTasksScreen extends StatelessWidget {
                     style: TextStyle(color: AppColors.mutedText),
                   ),
                   const SizedBox(height: 18),
-                  for (final task in tasks) ...[
-                    TaskCard(task: task),
-                    const SizedBox(height: 14),
-                  ],
+                  if (tasks.isEmpty)
+                    const _EmptySupervisorTasks()
+                  else
+                    for (final task in tasks) ...[
+                      TaskCard(task: task),
+                      const SizedBox(height: 14),
+                    ],
                 ],
               ),
             ),
@@ -147,6 +165,28 @@ class SupervisorReviewsScreen extends StatefulWidget {
   @override
   State<SupervisorReviewsScreen> createState() =>
       _SupervisorReviewsScreenState();
+}
+
+class _EmptySupervisorTasks extends StatelessWidget {
+  const _EmptySupervisorTasks();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: AppColors.border, width: 1.3),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const Text(
+        'No team tasks available',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: AppColors.mutedText),
+      ),
+    );
+  }
 }
 
 class _SupervisorReviewsScreenState extends State<SupervisorReviewsScreen> {

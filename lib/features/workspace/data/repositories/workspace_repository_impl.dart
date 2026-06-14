@@ -1,21 +1,23 @@
 import '../../../../core/errors/app_failure.dart';
 import '../../../../core/network/api_response_reader.dart';
 import '../../../../core/utils/app_result.dart';
+import '../../../role/domain/user_role.dart';
 import '../../domain/entities/workspace_entity.dart';
 import '../../domain/repositories/workspace_repository.dart';
+import '../datasources/workspace_remote_datasource.dart';
 import '../models/workspace_model.dart';
-import '../workspace_api_service.dart';
 
 class WorkspaceRepositoryImpl implements WorkspaceRepository {
-  const WorkspaceRepositoryImpl({required WorkspaceApiService apiService})
-    : _apiService = apiService;
+  const WorkspaceRepositoryImpl({
+    required WorkspaceRemoteDataSource remoteDataSource,
+  }) : _remoteDataSource = remoteDataSource;
 
-  final WorkspaceApiService _apiService;
+  final WorkspaceRemoteDataSource _remoteDataSource;
 
   @override
   Future<AppResult<List<WorkspaceEntity>>> getWorkspaces() async {
     try {
-      final rawWorkspaces = await _apiService.getWorkspaces();
+      final rawWorkspaces = await _remoteDataSource.getWorkspaces();
       final workspaces = rawWorkspaces
           .map(ApiResponseReader.asMap)
           .map(WorkspaceModel.fromJson)
@@ -33,12 +35,14 @@ class WorkspaceRepositoryImpl implements WorkspaceRepository {
   @override
   Future<AppResult<WorkspaceEntity?>> selectWorkspace({
     required WorkspaceEntity workspace,
-    required int roleId,
+    required UserRole role,
+    int? roleId,
   }) async {
     try {
-      final response = await _apiService.selectWorkspace(
+      final response = await _remoteDataSource.selectWorkspace(
         companyId: workspace.companyId,
         branchId: workspace.branchId,
+        role: role,
         roleId: roleId,
       );
       if (response.isEmpty) {
@@ -57,7 +61,7 @@ class WorkspaceRepositoryImpl implements WorkspaceRepository {
   @override
   Future<AppResult<WorkspaceEntity?>> getCurrentWorkspace() async {
     try {
-      final response = await _apiService.getCurrentWorkspace();
+      final response = await _remoteDataSource.getCurrentWorkspace();
       if (response.isEmpty) {
         return AppResult.success(null);
       }

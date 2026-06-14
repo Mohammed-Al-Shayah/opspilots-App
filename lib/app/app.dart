@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import '../features/attendance/presentation/cubit/attendance_cubit.dart';
 import '../features/home/presentation/cubit/field_home_cubit.dart';
 import '../features/role/presentation/cubit/role_cubit.dart';
 import '../features/auth/presentation/cubit/auth_cubit.dart';
 import '../features/settings/presentation/cubit/language_cubit.dart';
+import '../features/settings/presentation/cubit/notifications_cubit.dart';
 import '../features/supervisor/presentation/cubit/supervisor_cubit.dart';
 import '../features/tasks/presentation/cubit/tasks_cubit.dart';
 import '../features/workspace/presentation/cubit/workspace_cubit.dart';
@@ -23,10 +25,12 @@ class OpsPilotApp extends StatelessWidget {
         BlocProvider(create: (_) => LanguageCubit()),
         BlocProvider(create: (_) => sl<RoleCubit>()..loadDefaultRole()),
         BlocProvider(create: (_) => sl<AuthCubit>()),
-        BlocProvider(create: (_) => sl<WorkspaceCubit>()..loadWorkspaces()),
-        BlocProvider(create: (_) => sl<FieldHomeCubit>()..loadSummary()),
-        BlocProvider(create: (_) => sl<SupervisorCubit>()..loadSummary()),
+        BlocProvider(create: (_) => sl<WorkspaceCubit>()),
+        BlocProvider(create: (_) => sl<FieldHomeCubit>()),
+        BlocProvider(create: (_) => sl<SupervisorCubit>()),
         BlocProvider(create: (_) => sl<TasksCubit>()),
+        BlocProvider(create: (_) => sl<AttendanceCubit>()),
+        BlocProvider(create: (_) => sl<NotificationsCubit>()),
       ],
       child: BlocBuilder<LanguageCubit, LanguageState>(
         builder: (context, languageState) {

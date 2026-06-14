@@ -4,6 +4,7 @@ import '../../../core/network/api_paths.dart';
 import '../../../core/network/api_response_reader.dart';
 import '../../../core/network/api_token_store.dart';
 import '../../../core/network/dio_client.dart';
+import '../../role/domain/user_role.dart';
 
 class WorkspaceApiService {
   const WorkspaceApiService({
@@ -20,7 +21,20 @@ class WorkspaceApiService {
       final response = await _dioClient.instance.get<Object?>(
         ApiPaths.workspaces,
       );
-      return ApiResponseReader.asList(ApiResponseReader.data(response.data));
+      final data = ApiResponseReader.data(response.data);
+      final directList = ApiResponseReader.asList(data);
+      if (directList.isNotEmpty) {
+        return directList;
+      }
+
+      final dataMap = ApiResponseReader.asMap(data);
+      return ApiResponseReader.asList(
+        dataMap['workspaces'] ??
+            dataMap['companies'] ??
+            dataMap['items'] ??
+            dataMap['rows'] ??
+            dataMap['data'],
+      );
     } on DioException catch (exception) {
       throw _dioClient.mapFailure(exception);
     }
@@ -29,7 +43,8 @@ class WorkspaceApiService {
   Future<Map<String, dynamic>> selectWorkspace({
     required int companyId,
     int? branchId,
-    required int roleId,
+    required UserRole role,
+    int? roleId,
   }) async {
     try {
       await _tokenStore.clearWorkspace();
@@ -38,7 +53,10 @@ class WorkspaceApiService {
         data: {
           'company_id': companyId,
           'branch_id': branchId,
-          'role_id': roleId,
+          // ignore: use_null_aware_elements
+          if (roleId case final value?) 'role_id': value,
+          'role': role.apiValue,
+          'role_key': role.apiValue,
         },
       );
       final root = ApiResponseReader.asMap(response.data);

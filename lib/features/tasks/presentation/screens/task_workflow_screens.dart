@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/app_routes.dart';
@@ -8,6 +9,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../core/errors/app_failure.dart';
 import '../../../../core/widgets/ops_header.dart';
 import '../../domain/entities/task_transition.dart';
+import '../../domain/usecases/submit_task_workflow_usecase.dart';
 import '../cubit/tasks_cubit.dart';
 import '../../domain/entities/task_item.dart';
 
@@ -50,7 +52,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
     final isAccepted = widget.stage == TaskDetailsStage.accepted;
     final isActive = widget.stage == TaskDetailsStage.active;
     final selectedTask = context.watch<TasksCubit>().state.selectedTask;
-    final fallbackTask = widget.initialTask ?? selectedTask ?? demoTasks.first;
+    final fallbackTask = widget.initialTask ?? selectedTask;
 
     return _WorkflowScaffold(
       title: 'Task Details',
@@ -61,6 +63,12 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
         initialData: fallbackTask,
         builder: (context, snapshot) {
           final task = snapshot.data ?? fallbackTask;
+          if (task == null) {
+            return ListView(
+              padding: const EdgeInsets.all(24),
+              children: const [_InlineError(message: 'No task selected.')],
+            );
+          }
           return ListView(
             padding: const EdgeInsets.all(24),
             children: [
@@ -158,7 +166,7 @@ class _AcceptTaskScreenState extends State<AcceptTaskScreen> {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<TasksCubit>().state;
-    final task = state.selectedTask ?? demoTasks.first;
+    final task = state.selectedTask;
     final errorMessage = state.errorMessage;
 
     return _WorkflowScaffold(
@@ -193,7 +201,10 @@ class _AcceptTaskScreenState extends State<AcceptTaskScreen> {
                   ),
                 ),
                 const SizedBox(height: 48),
-                _MiniTaskCard(task: task),
+                if (task == null)
+                  const _InlineError(message: 'No task selected.')
+                else
+                  _MiniTaskCard(task: task),
               ],
             ),
           ),
@@ -205,7 +216,7 @@ class _AcceptTaskScreenState extends State<AcceptTaskScreen> {
           _PrimaryButton(
             label: _isSubmitting ? 'Accepting...' : 'Accept Task',
             icon: Icons.check_circle_outline,
-            onPressed: _isSubmitting ? null : _acceptTask,
+            onPressed: _isSubmitting || task == null ? null : _acceptTask,
           ),
           const SizedBox(height: 12),
           _SecondaryButton(
@@ -218,8 +229,63 @@ class _AcceptTaskScreenState extends State<AcceptTaskScreen> {
   }
 }
 
-class TaskCheckInScreen extends StatelessWidget {
+class TaskCheckInScreen extends StatefulWidget {
   const TaskCheckInScreen({super.key});
+
+  @override
+  State<TaskCheckInScreen> createState() => _TaskCheckInScreenState();
+}
+
+class _TaskCheckInScreenState extends State<TaskCheckInScreen> {
+  bool _submitting = false;
+
+  Future<void> _checkIn() async {
+    if (_submitting) {
+      return;
+    }
+    setState(() => _submitting = true);
+    final position = await _currentPosition();
+    if (position == null || !mounted) {
+      setState(() => _submitting = false);
+      return;
+    }
+    final success = await context.read<TasksCubit>().transitionSelectedTask(
+      TaskTransition.checkIn,
+      latitude: position.latitude,
+      longitude: position.longitude,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() => _submitting = false);
+    if (success) {
+      context.go(AppRoutes.beforePhotos);
+    }
+  }
+
+  Future<Position?> _currentPosition() async {
+    final messenger = ScaffoldMessenger.of(context);
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Location service is disabled.')),
+      );
+      return null;
+    }
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Location permission is required.')),
+      );
+      return null;
+    }
+    return Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -287,15 +353,15 @@ class TaskCheckInScreen extends StatelessWidget {
                             style: TextStyle(color: AppColors.mutedText),
                           ),
                           Text(
-                            '15m',
+                            'Location will be verified',
                             style: TextStyle(
                               color: Color(0xFF00C853),
-                              fontSize: 24,
+                              fontSize: 18,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
                           Text(
-                            'You are near the location',
+                            'Current GPS is sent to the API',
                             style: TextStyle(
                               color: AppColors.mutedText,
                               fontSize: 12,
@@ -311,9 +377,9 @@ class TaskCheckInScreen extends StatelessWidget {
           ),
           const SizedBox(height: 26),
           _PrimaryButton(
-            label: 'Check In',
+            label: _submitting ? 'Checking in...' : 'Check In',
             icon: Icons.location_on_outlined,
-            onPressed: () => context.go(AppRoutes.beforePhotos),
+            onPressed: _submitting ? null : _checkIn,
           ),
         ],
       ),
@@ -386,73 +452,142 @@ class TaskPhotoUploadScreen extends StatelessWidget {
   }
 }
 
-class MaterialsScreen extends StatelessWidget {
+class MaterialsScreen extends StatefulWidget {
   const MaterialsScreen({super.key});
+
+  @override
+  State<MaterialsScreen> createState() => _MaterialsScreenState();
+}
+
+class _MaterialsScreenState extends State<MaterialsScreen> {
+  final _entries = <String>[];
+  double _total = 0;
+
+  Future<void> _addMaterial() async {
+    final result = await _showMaterialDialog(context);
+    if (result == null || !mounted) {
+      return;
+    }
+    final success = await context.read<TasksCubit>().submitWorkflowAction(
+      TaskWorkflowAction.material,
+      result,
+    );
+    if (!mounted) {
+      return;
+    }
+    if (success) {
+      setState(() {
+        _entries.add(result['name']?.toString() ?? 'Material');
+        _total += (result['cost'] as num?)?.toDouble() ?? 0;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return _ListEntryScreen(
       title: 'Materials',
       summaryLabel: 'Total Materials Cost',
-      summaryValue: r'$0.00',
+      summaryValue: '\$${_total.toStringAsFixed(2)}',
       icon: Icons.inventory_2_outlined,
       iconColor: const Color(0xFF2563EB),
-      sectionTitle: 'Used Materials (0)',
+      sectionTitle: 'Used Materials (${_entries.length})',
       emptyIcon: Icons.inventory_2_outlined,
       emptyText: 'No materials added yet',
       addTitle: 'Add Material',
       addSubtitle: 'Enter the material details below',
-      modalChildren: const [
-        _ModalField(label: 'Material Name *', value: 'e.g., Electrical Cable'),
-        Row(
-          children: [
-            Expanded(
-              child: _ModalField(label: 'Quantity *', value: '0'),
-            ),
-            SizedBox(width: 18),
-            Expanded(
-              child: _ModalField(label: r'Cost ($) *', value: '0.00'),
-            ),
-          ],
-        ),
-        _ModalField(label: 'Notes', value: 'Optional notes...'),
-      ],
+      entries: _entries,
+      onAdd: _addMaterial,
     );
   }
 }
 
-class ExpensesScreen extends StatelessWidget {
+class ExpensesScreen extends StatefulWidget {
   const ExpensesScreen({super.key});
+
+  @override
+  State<ExpensesScreen> createState() => _ExpensesScreenState();
+}
+
+class _ExpensesScreenState extends State<ExpensesScreen> {
+  final _entries = <String>[];
+  double _total = 0;
+
+  Future<void> _addExpense() async {
+    final result = await _showExpenseDialog(context);
+    if (result == null || !mounted) {
+      return;
+    }
+    final success = await context.read<TasksCubit>().submitWorkflowAction(
+      TaskWorkflowAction.expense,
+      result,
+    );
+    if (!mounted) {
+      return;
+    }
+    if (success) {
+      setState(() {
+        _entries.add(result['type']?.toString() ?? 'Expense');
+        _total += (result['amount'] as num?)?.toDouble() ?? 0;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return _ListEntryScreen(
       title: 'Expenses',
       summaryLabel: 'Total Expenses',
-      summaryValue: r'$0.00',
+      summaryValue: '\$${_total.toStringAsFixed(2)}',
       icon: Icons.attach_money,
       iconColor: const Color(0xFF16A34A),
-      sectionTitle: 'Expenses (0)',
+      sectionTitle: 'Expenses (${_entries.length})',
       emptyIcon: Icons.attach_money,
       emptyText: 'No expenses added yet',
       addTitle: 'Add Expense',
       addSubtitle: 'Enter the expense details below',
-      modalChildren: const [
-        _ModalField(
-          label: 'Expense Type *',
-          value: 'Select type',
-          trailing: true,
-        ),
-        _ModalField(label: r'Amount ($) *', value: '0.00'),
-        _ReceiptButton(),
-        _ModalField(label: 'Notes', value: 'Optional notes...'),
-      ],
+      entries: _entries,
+      onAdd: _addExpense,
     );
   }
 }
 
-class AddNoteScreen extends StatelessWidget {
+class AddNoteScreen extends StatefulWidget {
   const AddNoteScreen({super.key});
+
+  @override
+  State<AddNoteScreen> createState() => _AddNoteScreenState();
+}
+
+class _AddNoteScreenState extends State<AddNoteScreen> {
+  final _notesController = TextEditingController();
+  bool _clientVisible = false;
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final note = _notesController.text.trim();
+    if (note.isEmpty || _submitting) {
+      return;
+    }
+    setState(() => _submitting = true);
+    final success = await context.read<TasksCubit>().submitWorkflowAction(
+      TaskWorkflowAction.note,
+      {'note': note, 'client_visible': _clientVisible},
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() => _submitting = false);
+    if (success) {
+      context.go(AppRoutes.activeTaskDetails);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -473,11 +608,17 @@ class AddNoteScreen extends StatelessWidget {
                   style: TextStyle(color: AppColors.ink, fontSize: 15),
                 ),
                 const SizedBox(height: 18),
-                const Text(
-                  'Add your notes here...',
-                  style: TextStyle(color: AppColors.mutedText, fontSize: 17),
+                TextField(
+                  controller: _notesController,
+                  minLines: 4,
+                  maxLines: 6,
+                  decoration: const InputDecoration(
+                    hintText: 'Add your notes here...',
+                    border: InputBorder.none,
+                  ),
+                  style: const TextStyle(color: AppColors.ink, fontSize: 17),
                 ),
-                const SizedBox(height: 84),
+                const SizedBox(height: 24),
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
@@ -504,7 +645,12 @@ class AddNoteScreen extends StatelessWidget {
                           ],
                         ),
                       ),
-                      Switch(value: false, onChanged: (_) {}),
+                      Switch(
+                        value: _clientVisible,
+                        onChanged: (value) {
+                          setState(() => _clientVisible = value);
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -529,9 +675,9 @@ class AddNoteScreen extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: _PrimaryButton(
-                  label: 'Save',
+                  label: _submitting ? 'Saving...' : 'Save',
                   icon: Icons.note_alt_outlined,
-                  onPressed: () => context.go(AppRoutes.activeTaskDetails),
+                  onPressed: _submitting ? null : _save,
                 ),
               ),
             ],
@@ -542,19 +688,49 @@ class AddNoteScreen extends StatelessWidget {
   }
 }
 
-class UpdateStatusScreen extends StatelessWidget {
+class UpdateStatusScreen extends StatefulWidget {
   const UpdateStatusScreen({super.key});
+
+  @override
+  State<UpdateStatusScreen> createState() => _UpdateStatusScreenState();
+}
+
+class _UpdateStatusScreenState extends State<UpdateStatusScreen> {
+  final _noteController = TextEditingController();
+  var _selected = TaskTransition.onTheWay;
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _updateStatus() async {
+    if (_submitting) {
+      return;
+    }
+    setState(() => _submitting = true);
+    final success = await context.read<TasksCubit>().transitionSelectedTask(
+      _selected,
+      note: _noteController.text.trim(),
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() => _submitting = false);
+    if (success) {
+      context.go(AppRoutes.activeTaskDetails);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final statuses = const [
-      'Accepted',
-      'On the Way',
-      'Arrived',
-      'In Progress',
-      'Waiting Client',
-      'Need Materials',
-      'Failed',
+      (label: 'On the Way', transition: TaskTransition.onTheWay),
+      (label: 'Arrived', transition: TaskTransition.arrived),
+      (label: 'In Progress', transition: TaskTransition.start),
+      (label: 'Failed', transition: TaskTransition.reviewReject),
     ];
     return _WorkflowScaffold(
       title: 'Update Status',
@@ -607,7 +783,11 @@ class UpdateStatusScreen extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           for (final status in statuses) ...[
-            _StatusOption(label: status, selected: status == 'On the Way'),
+            _StatusOption(
+              label: status.label,
+              selected: status.transition == _selected,
+              onTap: () => setState(() => _selected = status.transition),
+            ),
             const SizedBox(height: 10),
           ],
           const SizedBox(height: 8),
@@ -616,15 +796,18 @@ class UpdateStatusScreen extends StatelessWidget {
             style: TextStyle(color: AppColors.ink),
           ),
           const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Text(
-              'Add a note about this status change...',
-              style: TextStyle(color: AppColors.mutedText, fontSize: 16),
+          TextField(
+            controller: _noteController,
+            minLines: 3,
+            maxLines: 5,
+            decoration: InputDecoration(
+              hintText: 'Add a note about this status change...',
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
             ),
           ),
           const SizedBox(height: 26),
@@ -639,8 +822,8 @@ class UpdateStatusScreen extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: _PrimaryButton(
-                  label: 'Update Status',
-                  onPressed: () => context.go(AppRoutes.activeTaskDetails),
+                  label: _submitting ? 'Updating...' : 'Update Status',
+                  onPressed: _submitting ? null : _updateStatus,
                 ),
               ),
             ],
@@ -708,6 +891,7 @@ class ClientSignatureScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final task = context.watch<TasksCubit>().state.selectedTask;
     return _WorkflowScaffold(
       title: 'Client Signature',
       fallbackRoute: AppRoutes.afterPhotos,
@@ -725,7 +909,12 @@ class ClientSignatureScreen extends StatelessWidget {
                   style: TextStyle(color: AppColors.ink),
                 ),
                 const SizedBox(height: 18),
-                const Text('mo', style: TextStyle(color: AppColors.ink)),
+                Text(
+                  task?.client.isNotEmpty == true
+                      ? task!.client
+                      : 'Client unavailable',
+                  style: const TextStyle(color: AppColors.ink),
+                ),
                 const SizedBox(height: 46),
                 const Text('Sign here', style: TextStyle(color: AppColors.ink)),
                 const SizedBox(height: 8),
@@ -740,13 +929,13 @@ class ClientSignatureScreen extends StatelessWidget {
                   ),
                   child: const Center(
                     child: Text(
-                      'Signature added',
+                      'Signature pending',
                       style: TextStyle(color: AppColors.mutedText),
                     ),
                   ),
                 ),
                 const SizedBox(height: 40),
-                _SecondaryButton(label: 'Clear', onPressed: () {}),
+                const _SecondaryButton(label: 'Clear', onPressed: null),
               ],
             ),
           ),
@@ -761,8 +950,41 @@ class ClientSignatureScreen extends StatelessWidget {
   }
 }
 
-class RateServiceScreen extends StatelessWidget {
+class RateServiceScreen extends StatefulWidget {
   const RateServiceScreen({super.key});
+
+  @override
+  State<RateServiceScreen> createState() => _RateServiceScreenState();
+}
+
+class _RateServiceScreenState extends State<RateServiceScreen> {
+  bool _submitting = false;
+
+  Future<void> _completeTask() async {
+    if (_submitting) {
+      return;
+    }
+    setState(() => _submitting = true);
+    final cubit = context.read<TasksCubit>();
+    final ratingSaved = await cubit.submitWorkflowAction(
+      TaskWorkflowAction.rating,
+      const {'rating': 2},
+    );
+    if (!ratingSaved || !mounted) {
+      setState(() => _submitting = false);
+      return;
+    }
+    final completed = await cubit.transitionSelectedTask(
+      TaskTransition.submitForReview,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() => _submitting = false);
+    if (completed) {
+      context.go(AppRoutes.tasks);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -823,8 +1045,8 @@ class RateServiceScreen extends StatelessWidget {
           ),
           const SizedBox(height: 26),
           _GreenButton(
-            label: 'Complete Task',
-            onPressed: () => context.go(AppRoutes.tasks),
+            label: _submitting ? 'Completing...' : 'Complete Task',
+            onPressed: _submitting ? null : _completeTask,
           ),
         ],
       ),
@@ -980,7 +1202,14 @@ class _TaskDetailsBottom extends StatelessWidget {
               child: _SecondaryButton(
                 label: 'Reject Task',
                 icon: Icons.cancel_outlined,
-                onPressed: () {},
+                onPressed: () async {
+                  final rejected = await context
+                      .read<TasksCubit>()
+                      .transitionSelectedTask(TaskTransition.reject);
+                  if (rejected && context.mounted) {
+                    context.popOrGo(AppRoutes.tasks);
+                  }
+                },
               ),
             ),
             const SizedBox(width: 12),
@@ -1126,7 +1355,8 @@ class _ListEntryScreen extends StatelessWidget {
     required this.emptyText,
     required this.addTitle,
     required this.addSubtitle,
-    required this.modalChildren,
+    required this.entries,
+    required this.onAdd,
   });
 
   final String title;
@@ -1139,7 +1369,8 @@ class _ListEntryScreen extends StatelessWidget {
   final String emptyText;
   final String addTitle;
   final String addSubtitle;
-  final List<Widget> modalChildren;
+  final List<String> entries;
+  final VoidCallback onAdd;
 
   @override
   Widget build(BuildContext context) {
@@ -1195,12 +1426,7 @@ class _ListEntryScreen extends StatelessWidget {
                 ),
               ),
               FilledButton.icon(
-                onPressed: () => _showEntryDialog(
-                  context,
-                  title: addTitle,
-                  subtitle: addSubtitle,
-                  children: modalChildren,
-                ),
+                onPressed: onAdd,
                 icon: const Icon(Icons.add),
                 label: const Text('Add'),
                 style: FilledButton.styleFrom(
@@ -1211,44 +1437,181 @@ class _ListEntryScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
-          Container(
-            height: 174,
-            decoration: _cardDecoration(),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(emptyIcon, color: const Color(0xFFD1D5DB), size: 52),
-                const SizedBox(height: 28),
-                Text(
-                  emptyText,
-                  style: const TextStyle(
-                    color: AppColors.mutedText,
-                    fontSize: 16,
+          if (entries.isEmpty)
+            Container(
+              height: 174,
+              decoration: _cardDecoration(),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(emptyIcon, color: const Color(0xFFD1D5DB), size: 52),
+                  const SizedBox(height: 28),
+                  Text(
+                    emptyText,
+                    style: const TextStyle(
+                      color: AppColors.mutedText,
+                      fontSize: 16,
+                    ),
                   ),
+                ],
+              ),
+            )
+          else
+            for (final entry in entries) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: _cardDecoration(),
+                child: Row(
+                  children: [
+                    Icon(emptyIcon, color: iconColor),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        entry,
+                        style: const TextStyle(
+                          color: AppColors.ink,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+              const SizedBox(height: 10),
+            ],
         ],
       ),
     );
   }
 }
 
-void _showEntryDialog(
-  BuildContext context, {
-  required String title,
-  required String subtitle,
-  required List<Widget> children,
-}) {
-  showDialog<void>(
+Future<Map<String, dynamic>?> _showMaterialDialog(BuildContext context) {
+  final nameController = TextEditingController();
+  final quantityController = TextEditingController(text: '1');
+  final costController = TextEditingController(text: '0');
+  final notesController = TextEditingController();
+
+  return showDialog<Map<String, dynamic>>(
     context: context,
     builder: (context) {
-      return Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(26, 18, 26, 26),
+      return _EntryDialog(
+        title: 'Add Material',
+        subtitle: 'Enter the material details below',
+        children: [
+          _DialogTextField(
+            controller: nameController,
+            label: 'Material Name *',
+            hint: 'e.g., Electrical Cable',
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: _DialogTextField(
+                  controller: quantityController,
+                  label: 'Quantity *',
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+              const SizedBox(width: 18),
+              Expanded(
+                child: _DialogTextField(
+                  controller: costController,
+                  label: r'Cost ($) *',
+                  keyboardType: TextInputType.number,
+                ),
+              ),
+            ],
+          ),
+          _DialogTextField(
+            controller: notesController,
+            label: 'Notes',
+            hint: 'Optional notes...',
+          ),
+        ],
+        onSave: () {
+          final name = nameController.text.trim();
+          if (name.isEmpty) {
+            return null;
+          }
+          return {
+            'name': name,
+            'quantity': num.tryParse(quantityController.text.trim()) ?? 1,
+            'cost': num.tryParse(costController.text.trim()) ?? 0,
+            if (notesController.text.trim().isNotEmpty)
+              'notes': notesController.text.trim(),
+          };
+        },
+      );
+    },
+  );
+}
+
+Future<Map<String, dynamic>?> _showExpenseDialog(BuildContext context) {
+  final typeController = TextEditingController();
+  final amountController = TextEditingController(text: '0');
+  final notesController = TextEditingController();
+
+  return showDialog<Map<String, dynamic>>(
+    context: context,
+    builder: (context) {
+      return _EntryDialog(
+        title: 'Add Expense',
+        subtitle: 'Enter the expense details below',
+        children: [
+          _DialogTextField(
+            controller: typeController,
+            label: 'Expense Type *',
+            hint: 'Fuel, parking, materials...',
+          ),
+          _DialogTextField(
+            controller: amountController,
+            label: r'Amount ($) *',
+            keyboardType: TextInputType.number,
+          ),
+          _DialogTextField(
+            controller: notesController,
+            label: 'Notes',
+            hint: 'Optional notes...',
+          ),
+        ],
+        onSave: () {
+          final type = typeController.text.trim();
+          if (type.isEmpty) {
+            return null;
+          }
+          return {
+            'type': type,
+            'amount': num.tryParse(amountController.text.trim()) ?? 0,
+            if (notesController.text.trim().isNotEmpty)
+              'notes': notesController.text.trim(),
+          };
+        },
+      );
+    },
+  );
+}
+
+class _EntryDialog extends StatelessWidget {
+  const _EntryDialog({
+    required this.title,
+    required this.subtitle,
+    required this.children,
+    required this.onSave,
+  });
+
+  final String title;
+  final String subtitle;
+  final List<Widget> children;
+  final Map<String, dynamic>? Function() onSave;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(26, 18, 26, 26),
+        child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1278,7 +1641,7 @@ void _showEntryDialog(
               ),
               const SizedBox(height: 18),
               ...children,
-              const SizedBox(height: 36),
+              const SizedBox(height: 26),
               Row(
                 children: [
                   Expanded(
@@ -1291,7 +1654,18 @@ void _showEntryDialog(
                   Expanded(
                     child: _PrimaryButton(
                       label: 'Save',
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () {
+                        final payload = onSave();
+                        if (payload == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Required fields are missing.'),
+                            ),
+                          );
+                          return;
+                        }
+                        Navigator.of(context).pop(payload);
+                      },
                     ),
                   ),
                 ],
@@ -1299,66 +1673,36 @@ void _showEntryDialog(
             ],
           ),
         ),
-      );
-    },
-  );
-}
-
-class _ModalField extends StatelessWidget {
-  const _ModalField({
-    required this.label,
-    required this.value,
-    this.trailing = false,
-  });
-
-  final String label;
-  final String value;
-  final bool trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(color: AppColors.ink)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  value,
-                  style: const TextStyle(
-                    color: AppColors.mutedText,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              if (trailing)
-                const Icon(
-                  Icons.keyboard_arrow_down,
-                  color: AppColors.mutedText,
-                ),
-            ],
-          ),
-        ],
       ),
     );
   }
 }
 
-class _ReceiptButton extends StatelessWidget {
-  const _ReceiptButton();
+class _DialogTextField extends StatelessWidget {
+  const _DialogTextField({
+    required this.controller,
+    required this.label,
+    this.hint,
+    this.keyboardType,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final String? hint;
+  final TextInputType? keyboardType;
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(bottom: 18),
-      child: _UploadBox(
-        icon: Icons.upload_outlined,
-        label: 'Upload Receipt',
-        compact: true,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: TextField(
+        controller: controller,
+        keyboardType: keyboardType,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(9)),
+        ),
       ),
     );
   }
@@ -1433,46 +1777,51 @@ class _CompletionStep extends StatelessWidget {
 }
 
 class _StatusOption extends StatelessWidget {
-  const _StatusOption({required this.label, this.selected = false});
+  const _StatusOption({required this.label, this.selected = false, this.onTap});
 
   final String label;
   final bool selected;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 50,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      decoration: BoxDecoration(
-        color: selected ? const Color(0xFFF3E8FF) : Colors.white,
-        border: Border.all(
-          color: selected ? const Color(0xFFD8B4FE) : AppColors.border,
-          width: 1.3,
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        height: 50,
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFFF3E8FF) : Colors.white,
+          border: Border.all(
+            color: selected ? const Color(0xFFD8B4FE) : AppColors.border,
+            width: 1.3,
+          ),
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF9333EA).withValues(alpha: 0.2),
+                    blurRadius: 4,
+                  ),
+                ]
+              : null,
         ),
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: selected
-            ? [
-                BoxShadow(
-                  color: const Color(0xFF9333EA).withValues(alpha: 0.2),
-                  blurRadius: 4,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: selected ? const Color(0xFF7E22CE) : AppColors.ink,
+                  fontSize: 16,
                 ),
-              ]
-            : null,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                color: selected ? const Color(0xFF7E22CE) : AppColors.ink,
-                fontSize: 16,
               ),
             ),
-          ),
-          if (selected)
-            const Icon(Icons.check_circle_outline, color: Color(0xFF7E22CE)),
-        ],
+            if (selected)
+              const Icon(Icons.check_circle_outline, color: Color(0xFF7E22CE)),
+          ],
+        ),
       ),
     );
   }

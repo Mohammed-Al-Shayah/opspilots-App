@@ -73,7 +73,11 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
                 ? WorkspaceStatus.empty
                 : WorkspaceStatus.loaded,
             workspaces: workspaces,
-            selectedWorkspace: workspaces.length == 1 ? workspaces.first : null,
+            selectedWorkspace:
+                workspaces.length == 1 &&
+                    workspaces.first.availableRoles.isNotEmpty
+                ? workspaces.first
+                : null,
             errorMessage: null,
           ),
         );
@@ -114,10 +118,20 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
     }
 
     emit(state.copyWith(status: WorkspaceStatus.selecting, errorMessage: null));
+    if (!workspace.availableRoles.contains(role)) {
+      emit(
+        state.copyWith(
+          status: WorkspaceStatus.loaded,
+          errorMessage: 'This workspace does not include the selected role.',
+        ),
+      );
+      return false;
+    }
 
     final result = await _selectWorkspaceUseCase(
       SelectWorkspaceParams(
         workspace: workspace,
+        role: role,
         roleId: workspace.roleIdFor(role),
       ),
     );

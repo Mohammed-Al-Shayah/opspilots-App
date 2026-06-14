@@ -8,7 +8,6 @@ import '../../../operations/presentation/screens/operations_screens.dart';
 import '../../../role/domain/user_role.dart';
 import '../../../role/presentation/cubit/role_cubit.dart';
 import '../../../supervisor/presentation/screens/supervisor_screens.dart';
-import '../../../tasks/domain/entities/task_item.dart';
 import '../../../tasks/presentation/widgets/field_bottom_nav.dart';
 import '../../../tasks/presentation/widgets/task_card.dart';
 import '../cubit/field_home_cubit.dart';
@@ -27,8 +26,15 @@ class RoleHomeScreen extends StatelessWidget {
     }
 
     final state = context.watch<FieldHomeCubit>().state;
+    if (state.status == FieldHomeStatus.initial) {
+      Future.microtask(() {
+        if (context.mounted) {
+          context.read<FieldHomeCubit>().loadSummary();
+        }
+      });
+    }
     final summary = state.summary;
-    final tasks = summary?.todayTasks ?? demoTasks.take(2).toList();
+    final tasks = summary?.todayTasks ?? const [];
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -40,7 +46,7 @@ class RoleHomeScreen extends StatelessWidget {
             padding: EdgeInsets.zero,
             children: [
               _DashboardHeader(
-                name: summary?.employeeName ?? 'أحمد محمد',
+                name: summary?.employeeName ?? '',
                 roleLabel: summary?.roleLabel ?? 'Field Employee',
               ),
               Transform.translate(
@@ -109,14 +115,19 @@ class RoleHomeScreen extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 16),
-                      for (final task in tasks) ...[
-                        TaskCard(
-                          task: task,
-                          onTap: () =>
-                              context.push(AppRoutes.taskDetails, extra: task),
-                        ),
-                        const SizedBox(height: 14),
-                      ],
+                      if (tasks.isEmpty)
+                        const _NoTasksCard()
+                      else
+                        for (final task in tasks) ...[
+                          TaskCard(
+                            task: task,
+                            onTap: () => context.push(
+                              AppRoutes.taskDetails,
+                              extra: task,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                        ],
                       const SizedBox(height: 10),
                     ],
                   ),
@@ -127,6 +138,28 @@ class RoleHomeScreen extends StatelessWidget {
         ),
       ),
       bottomNavigationBar: const FieldBottomNav(currentTab: FieldNavTab.home),
+    );
+  }
+}
+
+class _NoTasksCard extends StatelessWidget {
+  const _NoTasksCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: AppColors.border, width: 1.3),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const Text(
+        'No tasks scheduled',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: AppColors.mutedText),
+      ),
     );
   }
 }

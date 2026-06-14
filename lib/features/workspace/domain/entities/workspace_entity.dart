@@ -21,7 +21,7 @@ class WorkspaceEntity {
   final List<UserRole> availableRoles;
   final Map<UserRole, int> roleIds;
 
-  int roleIdFor(UserRole role) {
-    return roleIds[role] ?? role.index + 1;
+  int? roleIdFor(UserRole role) {
+    return roleIds[role];
   }
 }

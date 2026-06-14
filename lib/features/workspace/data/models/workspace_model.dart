@@ -15,10 +15,18 @@ class WorkspaceModel extends WorkspaceEntity {
   });
 
   factory WorkspaceModel.fromJson(Map<String, dynamic> json) {
-    final company = ApiResponseReader.asMap(json['company']);
-    final branch = ApiResponseReader.asMap(json['branch']);
+    final membership = ApiResponseReader.asMap(
+      json['membership'] ?? json['pivot'] ?? json['assignment'],
+    );
+    final company = ApiResponseReader.asMap(json['company']).isNotEmpty
+        ? ApiResponseReader.asMap(json['company'])
+        : ApiResponseReader.asMap(membership['company']);
+    final branch = ApiResponseReader.asMap(json['branch']).isNotEmpty
+        ? ApiResponseReader.asMap(json['branch'])
+        : ApiResponseReader.asMap(membership['branch']);
     final companyId =
         _intValue(json['company_id']) ??
+        _intValue(membership['company_id']) ??
         _intValue(company['id']) ??
         _intValue(json['id']);
 
@@ -50,8 +58,15 @@ class WorkspaceModel extends WorkspaceEntity {
   }
 
   static Map<UserRole, int> _rolesFromJson(Map<String, dynamic> json) {
+    final membership = ApiResponseReader.asMap(
+      json['membership'] ?? json['pivot'] ?? json['assignment'],
+    );
     final roleItems = ApiResponseReader.asList(
-      json['roles'] ?? json['available_roles'] ?? json['user_roles'],
+      json['roles'] ??
+          json['available_roles'] ??
+          json['user_roles'] ??
+          membership['roles'] ??
+          membership['available_roles'],
     );
     final roles = <UserRole, int>{};
 
@@ -71,15 +86,22 @@ class WorkspaceModel extends WorkspaceEntity {
     }
 
     if (roles.isEmpty) {
-      final role = _roleFromValue(json['role'] ?? json['type']);
+      final role = _roleFromValue(
+        json['role'] ??
+            json['type'] ??
+            json['role_name'] ??
+            membership['role'] ??
+            membership['type'] ??
+            membership['role_name'],
+      );
       if (role != null) {
-        roles[role] = _intValue(json['role_id']) ?? role.index + 1;
+        roles[role] =
+            _intValue(json['role_id'] ?? membership['role_id']) ??
+            role.index + 1;
       }
     }
 
-    return roles.isEmpty
-        ? {UserRole.fieldEmployee: UserRole.fieldEmployee.index + 1}
-        : roles;
+    return roles;
   }
 
   static UserRole? _roleFromValue(Object? value) {
