@@ -6,6 +6,7 @@ import '../../domain/usecases/get_my_tasks_usecase.dart';
 import '../../domain/usecases/get_task_details_usecase.dart';
 import '../../domain/usecases/submit_task_workflow_usecase.dart';
 import '../../domain/usecases/transition_task_usecase.dart';
+import '../../domain/usecases/upload_task_assets_usecase.dart';
 import '../../domain/entities/task_item.dart';
 
 enum TasksStatus { initial, loading, loaded, empty, failure, actionLoading }
@@ -47,16 +48,25 @@ class TasksCubit extends Cubit<TasksState> {
     required GetTaskDetailsUseCase getTaskDetailsUseCase,
     required TransitionTaskUseCase transitionTaskUseCase,
     required SubmitTaskWorkflowUseCase submitTaskWorkflowUseCase,
+    required UploadTaskPhotoUseCase uploadTaskPhotoUseCase,
+    required DeleteTaskPhotoUseCase deleteTaskPhotoUseCase,
+    required UploadTaskSignatureUseCase uploadTaskSignatureUseCase,
   }) : _getMyTasksUseCase = getMyTasksUseCase,
        _getTaskDetailsUseCase = getTaskDetailsUseCase,
        _transitionTaskUseCase = transitionTaskUseCase,
        _submitTaskWorkflowUseCase = submitTaskWorkflowUseCase,
+       _uploadTaskPhotoUseCase = uploadTaskPhotoUseCase,
+       _deleteTaskPhotoUseCase = deleteTaskPhotoUseCase,
+       _uploadTaskSignatureUseCase = uploadTaskSignatureUseCase,
        super(const TasksState());
 
   final GetMyTasksUseCase _getMyTasksUseCase;
   final GetTaskDetailsUseCase _getTaskDetailsUseCase;
   final TransitionTaskUseCase _transitionTaskUseCase;
   final SubmitTaskWorkflowUseCase _submitTaskWorkflowUseCase;
+  final UploadTaskPhotoUseCase _uploadTaskPhotoUseCase;
+  final DeleteTaskPhotoUseCase _deleteTaskPhotoUseCase;
+  final UploadTaskSignatureUseCase _uploadTaskSignatureUseCase;
 
   Future<void> loadMyTasks() async {
     emit(state.copyWith(status: TasksStatus.loading, errorMessage: null));
@@ -175,6 +185,110 @@ class TasksCubit extends Cubit<TasksState> {
       ),
     );
 
+    return result.when(
+      success: (_) {
+        emit(state.copyWith(status: _restoreStatus(previousStatus)));
+        return true;
+      },
+      failure: (failure) {
+        emit(
+          state.copyWith(
+            status: _restoreStatus(previousStatus),
+            errorMessage: failure.message,
+          ),
+        );
+        return false;
+      },
+    );
+  }
+
+  Future<bool> uploadSelectedTaskPhoto({
+    required String filePath,
+    required String type,
+  }) async {
+    final task = state.selectedTask;
+    if (task == null || task.id.isEmpty) {
+      emit(
+        state.copyWith(
+          status: TasksStatus.loaded,
+          errorMessage: 'No task selected.',
+        ),
+      );
+      return false;
+    }
+    final previousStatus = state.status;
+    emit(state.copyWith(status: TasksStatus.actionLoading, errorMessage: null));
+    final result = await _uploadTaskPhotoUseCase(
+      UploadTaskPhotoParams(taskId: task.id, filePath: filePath, type: type),
+    );
+    return result.when(
+      success: (_) {
+        emit(state.copyWith(status: _restoreStatus(previousStatus)));
+        return true;
+      },
+      failure: (failure) {
+        emit(
+          state.copyWith(
+            status: _restoreStatus(previousStatus),
+            errorMessage: failure.message,
+          ),
+        );
+        return false;
+      },
+    );
+  }
+
+  Future<bool> deleteSelectedTaskPhoto(String photoId) async {
+    final task = state.selectedTask;
+    if (task == null || task.id.isEmpty) {
+      return false;
+    }
+    final previousStatus = state.status;
+    emit(state.copyWith(status: TasksStatus.actionLoading, errorMessage: null));
+    final result = await _deleteTaskPhotoUseCase(
+      taskId: task.id,
+      photoId: photoId,
+    );
+    return result.when(
+      success: (_) {
+        emit(state.copyWith(status: _restoreStatus(previousStatus)));
+        return true;
+      },
+      failure: (failure) {
+        emit(
+          state.copyWith(
+            status: _restoreStatus(previousStatus),
+            errorMessage: failure.message,
+          ),
+        );
+        return false;
+      },
+    );
+  }
+
+  Future<bool> uploadSelectedTaskSignature({
+    required List<int> bytes,
+    required String clientName,
+  }) async {
+    final task = state.selectedTask;
+    if (task == null || task.id.isEmpty) {
+      emit(
+        state.copyWith(
+          status: TasksStatus.loaded,
+          errorMessage: 'No task selected.',
+        ),
+      );
+      return false;
+    }
+    final previousStatus = state.status;
+    emit(state.copyWith(status: TasksStatus.actionLoading, errorMessage: null));
+    final result = await _uploadTaskSignatureUseCase(
+      UploadTaskSignatureParams(
+        taskId: task.id,
+        bytes: bytes,
+        clientName: clientName,
+      ),
+    );
     return result.when(
       success: (_) {
         emit(state.copyWith(status: _restoreStatus(previousStatus)));

@@ -35,4 +35,18 @@ abstract class TasksRepository {
     String taskId,
     Map<String, dynamic> payload,
   );
+
+  Future<AppResult<void>> uploadPhoto({
+    required String taskId,
+    required String filePath,
+    required String type,
+  });
+
+  Future<AppResult<void>> deletePhoto(String taskId, String photoId);
+
+  Future<AppResult<void>> uploadSignature({
+    required String taskId,
+    required List<int> bytes,
+    required String clientName,
+  });
 }

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class ApiTokenStore {
@@ -7,6 +9,7 @@ class ApiTokenStore {
   static const _authTokenKey = 'auth_token';
   static const _workspaceTokenKey = 'workspace_token';
   static const _workspaceIdKey = 'workspace_id';
+  static const _loginWorkspacesKey = 'login_workspaces';
 
   final FlutterSecureStorage _storage;
 
@@ -16,6 +19,18 @@ class ApiTokenStore {
       _storage.read(key: _workspaceTokenKey);
 
   Future<String?> readWorkspaceId() => _storage.read(key: _workspaceIdKey);
+
+  Future<List<dynamic>> readLoginWorkspaces() async {
+    final value = await _storage.read(key: _loginWorkspacesKey);
+    if (value == null || value.isEmpty) {
+      return const [];
+    }
+    final decoded = jsonDecode(value);
+    if (decoded is List) {
+      return decoded;
+    }
+    return const [];
+  }
 
   Future<String?> readActiveToken() async {
     return await readWorkspaceToken() ?? await readAuthToken();
@@ -33,6 +48,13 @@ class ApiTokenStore {
     return _storage.write(key: _workspaceIdKey, value: workspaceId);
   }
 
+  Future<void> saveLoginWorkspaces(List<dynamic> workspaces) {
+    return _storage.write(
+      key: _loginWorkspacesKey,
+      value: jsonEncode(workspaces),
+    );
+  }
+
   Future<void> clearWorkspace() async {
     await _storage.delete(key: _workspaceTokenKey);
     await _storage.delete(key: _workspaceIdKey);
@@ -40,6 +62,7 @@ class ApiTokenStore {
 
   Future<void> clearAll() async {
     await _storage.delete(key: _authTokenKey);
+    await _storage.delete(key: _loginWorkspacesKey);
     await clearWorkspace();
   }
 }

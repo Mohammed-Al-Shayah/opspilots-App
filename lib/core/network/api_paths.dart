@@ -25,6 +25,10 @@ class ApiPaths {
 
   static const notifications = '/notifications';
   static const notificationsReadAll = '/notifications/read-all';
+  static const liveMap = '/live-map';
+  static const fieldEmployeeLocations = '/field-employees/locations';
+  static const chatConversations = '/chat/conversations';
+  static const chatAttachments = '/chat/attachments';
 
   static String taskMy(String taskId) => '/tasks/my/$taskId';
   static String task(String taskId) => '/tasks/$taskId';
@@ -63,5 +67,9 @@ class ApiPaths {
   static String taskRating(String taskId) => '/tasks/$taskId/rating';
   static String notificationRead(String notificationId) {
     return '/notifications/$notificationId/read';
+  }
+
+  static String chatMessages(String conversationId) {
+    return '/chat/conversations/$conversationId/messages';
   }
 }

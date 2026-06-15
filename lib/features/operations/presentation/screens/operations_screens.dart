@@ -1,15 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/router/navigation_extensions.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../tasks/presentation/widgets/field_bottom_nav.dart';
+import '../cubit/operations_cubit.dart';
 
 class OperationsHomeScreen extends StatelessWidget {
   const OperationsHomeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final cubit = context.read<OperationsCubit>();
+    if (cubit.state.dashboard == null &&
+        cubit.state.status == OperationsStatus.initial) {
+      Future.microtask(cubit.loadDashboard);
+    }
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -22,40 +30,45 @@ class OperationsHomeScreen extends StatelessWidget {
               offset: const Offset(0, -12),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    _OpsCounters(),
-                    SizedBox(height: 20),
-                    _CompletionRateCard(),
-                    SizedBox(height: 22),
-                    _AiSummaryCard(),
-                    SizedBox(height: 26),
-                    _DelayedAlert(),
-                    SizedBox(height: 26),
-                    Text(
-                      'Quick Access',
-                      style: TextStyle(
-                        color: AppColors.ink,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    SizedBox(height: 18),
-                    _QuickAccessGrid(),
-                    SizedBox(height: 26),
-                    Text(
-                      'Operations Overview',
-                      style: TextStyle(
-                        color: AppColors.ink,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    SizedBox(height: 18),
-                    _OperationsOverviewCard(),
-                    SizedBox(height: 24),
-                  ],
+                child: BlocBuilder<OperationsCubit, OperationsState>(
+                  builder: (context, state) {
+                    final values = state.dashboard?.values ?? const {};
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _OpsCounters(values: values),
+                        const SizedBox(height: 20),
+                        _CompletionRateCard(values: values),
+                        const SizedBox(height: 22),
+                        const _AiSummaryCard(),
+                        const SizedBox(height: 26),
+                        _DelayedAlert(values: values),
+                        const SizedBox(height: 26),
+                        const Text(
+                          'Quick Access',
+                          style: TextStyle(
+                            color: AppColors.ink,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        const _QuickAccessGrid(),
+                        const SizedBox(height: 26),
+                        const Text(
+                          'Operations Overview',
+                          style: TextStyle(
+                            color: AppColors.ink,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        _OperationsOverviewCard(values: values),
+                        const SizedBox(height: 24),
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -72,6 +85,11 @@ class OperationsReportsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cubit = context.read<OperationsCubit>();
+    if (cubit.state.reports == null &&
+        cubit.state.status == OperationsStatus.initial) {
+      Future.microtask(cubit.loadReports);
+    }
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -96,15 +114,19 @@ class OperationsReportsScreen extends StatelessWidget {
                       ),
                       const Spacer(),
                       OutlinedButton.icon(
-                        onPressed: () {},
+                        onPressed: () => context
+                            .read<OperationsCubit>()
+                            .exportAttendanceCsv(),
                         icon: const Icon(Icons.download_outlined, size: 18),
                         label: const Text('Export'),
                       ),
                       const SizedBox(width: 8),
                       OutlinedButton.icon(
-                        onPressed: () {},
+                        onPressed: () => context
+                            .read<OperationsCubit>()
+                            .exportAuditLogsCsv(),
                         icon: const Icon(Icons.share_outlined, size: 18),
-                        label: const Text('Share'),
+                        label: const Text('Audit'),
                       ),
                     ],
                   ),
@@ -122,20 +144,47 @@ class OperationsReportsScreen extends StatelessWidget {
             ),
             const Divider(height: 1, color: AppColors.border),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(24),
-                children: const [
-                  _PeriodTabs(),
-                  SizedBox(height: 26),
-                  _ReportMetricGrid(),
-                  SizedBox(height: 26),
-                  _PerformanceTrendCard(),
-                  SizedBox(height: 26),
-                  _TeamPerformanceCard(),
-                  SizedBox(height: 26),
-                  _TaskDistributionCard(),
-                  SizedBox(height: 24),
-                ],
+              child: BlocConsumer<OperationsCubit, OperationsState>(
+                listenWhen: (previous, current) =>
+                    previous.errorMessage != current.errorMessage ||
+                    previous.exportedBytes != current.exportedBytes,
+                listener: (context, state) {
+                  if (state.errorMessage != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(state.errorMessage!)),
+                    );
+                  } else if (state.exportedBytes != null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Export downloaded ${state.exportedBytes} bytes.',
+                        ),
+                      ),
+                    );
+                  }
+                },
+                builder: (context, state) {
+                  final values = state.reports?.values ?? const {};
+                  return ListView(
+                    padding: const EdgeInsets.all(24),
+                    children: [
+                      if (state.status == OperationsStatus.loading ||
+                          state.status == OperationsStatus.exporting)
+                        const LinearProgressIndicator(minHeight: 2),
+                      const SizedBox(height: 26),
+                      const _PeriodTabs(),
+                      const SizedBox(height: 26),
+                      _ReportMetricGrid(values: values),
+                      const SizedBox(height: 26),
+                      _PerformanceTrendCard(values: values),
+                      const SizedBox(height: 26),
+                      const _TeamPerformanceCard(),
+                      const SizedBox(height: 26),
+                      _TaskDistributionCard(values: values),
+                      const SizedBox(height: 24),
+                    ],
+                  );
+                },
               ),
             ),
           ],
@@ -312,31 +361,33 @@ class _OperationsHeader extends StatelessWidget {
 }
 
 class _OpsCounters extends StatelessWidget {
-  const _OpsCounters();
+  const _OpsCounters({required this.values});
+
+  final Map<String, dynamic> values;
 
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: const [
+      children: [
         Expanded(
           child: _CounterBox(
-            value: '1',
+            value: _value(values, const ['completed_today', 'completed']),
             label: 'Completed',
             color: Color(0xFF10BFA0),
           ),
         ),
-        SizedBox(width: 12),
+        const SizedBox(width: 12),
         Expanded(
           child: _CounterBox(
-            value: '1',
+            value: _value(values, const ['open_tickets', 'pending', 'open']),
             label: 'Open Tickets',
             color: Color(0xFFFF4D1D),
           ),
         ),
-        SizedBox(width: 12),
+        const SizedBox(width: 12),
         Expanded(
           child: _CounterBox(
-            value: '3',
+            value: _value(values, const ['active_teams', 'active_team']),
             label: 'Active Teams',
             color: Color(0xFF9333EA),
           ),
@@ -400,39 +451,44 @@ class _CounterBox extends StatelessWidget {
 }
 
 class _CompletionRateCard extends StatelessWidget {
-  const _CompletionRateCard();
+  const _CompletionRateCard({required this.values});
+
+  final Map<String, dynamic> values;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: _cardDecoration(),
-      child: const Row(
+      child: Row(
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Daily Completion Rate',
                   style: TextStyle(color: AppColors.mutedText),
                 ),
-                SizedBox(height: 30),
+                const SizedBox(height: 30),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      '33%',
-                      style: TextStyle(
+                      _percent(values, const [
+                        'completion_rate',
+                        'daily_completion_rate',
+                      ]),
+                      style: const TextStyle(
                         color: AppColors.ink,
                         fontSize: 32,
                         fontWeight: FontWeight.w800,
                         height: 1,
                       ),
                     ),
-                    SizedBox(width: 14),
-                    Text(
-                      '+5% from yesterday',
+                    const SizedBox(width: 14),
+                    const Text(
+                      'from API',
                       style: TextStyle(color: AppColors.mutedText),
                     ),
                   ],
@@ -440,7 +496,7 @@ class _CompletionRateCard extends StatelessWidget {
               ],
             ),
           ),
-          Icon(Icons.trending_up, color: Color(0xFF16A34A)),
+          const Icon(Icons.trending_up, color: Color(0xFF16A34A)),
         ],
       ),
     );
@@ -486,7 +542,7 @@ class _AiSummaryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 14),
                 FilledButton(
-                  onPressed: () {},
+                  onPressed: () => context.push(AppRoutes.operationsReports),
                   style: FilledButton.styleFrom(
                     backgroundColor: const Color(0xFFA020F0),
                     foregroundColor: Colors.white,
@@ -503,7 +559,9 @@ class _AiSummaryCard extends StatelessWidget {
 }
 
 class _DelayedAlert extends StatelessWidget {
-  const _DelayedAlert();
+  const _DelayedAlert({required this.values});
+
+  final Map<String, dynamic> values;
 
   @override
   Widget build(BuildContext context) {
@@ -514,22 +572,22 @@ class _DelayedAlert extends StatelessWidget {
         border: Border.all(color: const Color(0xFFFCA5A5)),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.error_outline, color: Colors.red),
-          SizedBox(width: 14),
+          const Icon(Icons.error_outline, color: Colors.red),
+          const SizedBox(width: 14),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                '2 Delayed Tasks',
-                style: TextStyle(
+                '${_value(values, const ['delayed_tasks', 'delayed'])} Delayed Tasks',
+                style: const TextStyle(
                   color: Color(0xFFB91C1C),
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
                 ),
               ),
-              Text(
+              const Text(
                 'Requires immediate attention',
                 style: TextStyle(color: Colors.red),
               ),
@@ -595,7 +653,9 @@ class _QuickAccessTile extends StatelessWidget {
 }
 
 class _OperationsOverviewCard extends StatelessWidget {
-  const _OperationsOverviewCard();
+  const _OperationsOverviewCard({required this.values});
+
+  final Map<String, dynamic> values;
 
   @override
   Widget build(BuildContext context) {
@@ -605,17 +665,17 @@ class _OperationsOverviewCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Expanded(
+              const Expanded(
                 child: Text(
                   'Task Completion',
                   style: TextStyle(color: AppColors.mutedText),
                 ),
               ),
               Text(
-                '33%',
-                style: TextStyle(
+                _percent(values, const ['task_completion', 'completion_rate']),
+                style: const TextStyle(
                   color: AppColors.ink,
                   fontWeight: FontWeight.w800,
                 ),
@@ -625,23 +685,32 @@ class _OperationsOverviewCard extends StatelessWidget {
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(999),
-            child: const LinearProgressIndicator(
-              value: 0.33,
+            child: LinearProgressIndicator(
+              value: _ratio(values, const [
+                'task_completion',
+                'completion_rate',
+              ]),
               minHeight: 7,
-              color: Color(0xFF16A34A),
-              backgroundColor: Color(0xFFE5E7EB),
+              color: const Color(0xFF16A34A),
+              backgroundColor: const Color(0xFFE5E7EB),
             ),
           ),
           const SizedBox(height: 24),
-          const Row(
+          Row(
             children: [
               Expanded(
-                child: _OverviewNumber(label: 'Total Tasks', value: '3'),
+                child: _OverviewNumber(
+                  label: 'Total Tasks',
+                  value: _value(values, const ['total_tasks', 'tasks']),
+                ),
               ),
               Expanded(
                 child: _OverviewNumber(
                   label: 'Avg. Response Time',
-                  value: '2.3h',
+                  value: _value(values, const [
+                    'avg_response_time',
+                    'average_response_time',
+                  ]),
                 ),
               ),
             ],
@@ -725,7 +794,9 @@ class _TabPill extends StatelessWidget {
 }
 
 class _ReportMetricGrid extends StatelessWidget {
-  const _ReportMetricGrid();
+  const _ReportMetricGrid({required this.values});
+
+  final Map<String, dynamic> values;
 
   @override
   Widget build(BuildContext context) {
@@ -736,32 +807,32 @@ class _ReportMetricGrid extends StatelessWidget {
       crossAxisSpacing: 12,
       mainAxisSpacing: 12,
       childAspectRatio: 1.02,
-      children: const [
+      children: [
         _ReportMetric(
           label: 'Completion',
-          value: '33%',
-          note: '+5% from last period',
+          value: _percent(values, const ['completion_rate']),
+          note: 'from API',
           color: Color(0xFF16A34A),
           icon: Icons.trending_up,
         ),
         _ReportMetric(
           label: 'Total Tasks',
-          value: '3',
-          note: '+12 from yesterday',
+          value: _value(values, const ['total_tasks', 'tasks']),
+          note: 'from API',
           color: Color(0xFF2563EB),
           icon: Icons.bar_chart,
         ),
         _ReportMetric(
           label: 'Delayed',
-          value: '2',
-          note: '-2 from yesterday',
+          value: _value(values, const ['delayed_tasks', 'delayed']),
+          note: 'from API',
           color: Colors.red,
           icon: Icons.trending_down,
         ),
         _ReportMetric(
           label: 'Avg Response',
-          value: '2.3h',
-          note: 'Improved by 15%',
+          value: _value(values, const ['avg_response_time']),
+          note: 'from API',
           color: Color(0xFFA020F0),
           icon: Icons.calendar_today,
         ),
@@ -818,36 +889,44 @@ class _ReportMetric extends StatelessWidget {
 }
 
 class _PerformanceTrendCard extends StatelessWidget {
-  const _PerformanceTrendCard();
+  const _PerformanceTrendCard({required this.values});
+
+  final Map<String, dynamic> values;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: _cardDecoration(),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Performance Trend', style: _cardTitle),
-          SizedBox(height: 40),
+          const Text('Performance Trend', style: _cardTitle),
+          const SizedBox(height: 40),
           _ProgressLine(
             label: 'Task Completion',
-            value: '33%',
-            progress: 0.33,
+            value: _percent(values, const [
+              'task_completion',
+              'completion_rate',
+            ]),
+            progress: _ratio(values, const [
+              'task_completion',
+              'completion_rate',
+            ]),
             color: Color(0xFF16A34A),
           ),
-          SizedBox(height: 14),
+          const SizedBox(height: 14),
           _ProgressLine(
             label: 'Client Satisfaction',
-            value: '4.6/5',
-            progress: 0.92,
+            value: _value(values, const ['client_satisfaction']),
+            progress: _ratio(values, const ['client_satisfaction'], max: 5),
             color: Color(0xFFF8C400),
           ),
-          SizedBox(height: 14),
+          const SizedBox(height: 14),
           _ProgressLine(
             label: 'On-Time Delivery',
-            value: '87%',
-            progress: 0.87,
+            value: _percent(values, const ['on_time_delivery']),
+            progress: _ratio(values, const ['on_time_delivery']),
             color: Color(0xFF2F7DF6),
           ),
         ],
@@ -1008,34 +1087,40 @@ class _TeamPerfRow extends StatelessWidget {
 }
 
 class _TaskDistributionCard extends StatelessWidget {
-  const _TaskDistributionCard();
+  const _TaskDistributionCard({required this.values});
+
+  final Map<String, dynamic> values;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: _cardDecoration(),
-      child: const Column(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Task Distribution', style: _cardTitle),
-          SizedBox(height: 40),
+          const Text('Task Distribution', style: _cardTitle),
+          const SizedBox(height: 40),
           _DistributionRow(
             label: 'Completed',
-            value: '1',
+            value: _value(values, const ['completed']),
             color: Color(0xFF16A34A),
           ),
           _DistributionRow(
             label: 'In Progress',
-            value: '1',
+            value: _value(values, const ['in_progress']),
             color: Color(0xFF2563EB),
           ),
           _DistributionRow(
             label: 'Pending',
-            value: '1',
+            value: _value(values, const ['pending']),
             color: AppColors.orange,
           ),
-          _DistributionRow(label: 'Delayed', value: '2', color: Colors.red),
+          _DistributionRow(
+            label: 'Delayed',
+            value: _value(values, const ['delayed']),
+            color: Colors.red,
+          ),
         ],
       ),
     );
@@ -1314,6 +1399,52 @@ const _cardTitle = TextStyle(
   fontSize: 20,
   fontWeight: FontWeight.w800,
 );
+
+String _value(Map<String, dynamic> values, List<String> keys) {
+  for (final key in keys) {
+    final value = values[key];
+    if (value != null && value.toString().isNotEmpty) {
+      return value.toString();
+    }
+  }
+  return '-';
+}
+
+String _percent(Map<String, dynamic> values, List<String> keys) {
+  final raw = _number(values, keys);
+  if (raw == null) {
+    return '-';
+  }
+  final value = raw <= 1 ? raw * 100 : raw;
+  return '${value.round()}%';
+}
+
+double _ratio(
+  Map<String, dynamic> values,
+  List<String> keys, {
+  double max = 100,
+}) {
+  final raw = _number(values, keys);
+  if (raw == null) {
+    return 0;
+  }
+  final value = raw <= 1 ? raw : raw / max;
+  return value.clamp(0, 1).toDouble();
+}
+
+double? _number(Map<String, dynamic> values, List<String> keys) {
+  for (final key in keys) {
+    final value = values[key];
+    if (value is num) {
+      return value.toDouble();
+    }
+    final parsed = double.tryParse(value?.toString() ?? '');
+    if (parsed != null) {
+      return parsed;
+    }
+  }
+  return null;
+}
 
 BoxDecoration _cardDecoration() {
   return BoxDecoration(

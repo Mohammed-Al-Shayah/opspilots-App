@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/localization/app_strings.dart';
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
+import '../../../auth/presentation/cubit/auth_cubit.dart';
+import '../../../role/domain/user_role.dart';
 import '../../../settings/presentation/cubit/language_cubit.dart';
 import '../widgets/field_bottom_nav.dart';
 
@@ -14,6 +16,11 @@ class ProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final language = context.watch<LanguageCubit>().state.languageCode;
+    final authState = context.watch<AuthCubit>().state;
+    final user = authState.user;
+    final name = user?.name.isNotEmpty == true ? user!.name : 'User';
+    final email = user?.email.isNotEmpty == true ? user!.email : '-';
+    final role = user?.defaultRole.labelEn ?? '-';
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -49,11 +56,11 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 18),
-                  const Center(
+                  Center(
                     child: Text(
-                      'أحمد محمد',
-                      textDirection: TextDirection.rtl,
-                      style: TextStyle(
+                      name,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 20,
                         fontWeight: FontWeight.w800,
@@ -61,10 +68,13 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 3),
-                  const Center(
+                  Center(
                     child: Text(
-                      'Field Employee',
-                      style: TextStyle(color: Color(0xFFD7DEE8), fontSize: 16),
+                      role,
+                      style: const TextStyle(
+                        color: Color(0xFFD7DEE8),
+                        fontSize: 16,
+                      ),
                     ),
                   ),
                 ],
@@ -76,7 +86,7 @@ class ProfileScreen extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Column(
                   children: [
-                    const _InfoCard(),
+                    _InfoCard(email: email),
                     const SizedBox(height: 26),
                     _MenuCard(
                       children: [
@@ -111,7 +121,12 @@ class ProfileScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 26),
                     OutlinedButton.icon(
-                      onPressed: () => context.go(AppRoutes.login),
+                      onPressed: () async {
+                        await context.read<AuthCubit>().logout();
+                        if (context.mounted) {
+                          context.go(AppRoutes.login);
+                        }
+                      },
                       icon: const Icon(Icons.logout, color: Color(0xFFE11D48)),
                       label: const Text('Logout'),
                       style: OutlinedButton.styleFrom(
@@ -139,7 +154,9 @@ class ProfileScreen extends StatelessWidget {
 }
 
 class _InfoCard extends StatelessWidget {
-  const _InfoCard();
+  const _InfoCard({required this.email});
+
+  final String email;
 
   @override
   Widget build(BuildContext context) {
@@ -150,24 +167,20 @@ class _InfoCard extends StatelessWidget {
         border: Border.all(color: AppColors.border),
         borderRadius: BorderRadius.circular(14),
       ),
-      child: const Column(
+      child: Column(
         children: [
-          _InfoRow(
-            icon: Icons.mail_outline,
-            label: 'Email',
-            value: 'mo@gmail.c',
-          ),
-          Divider(height: 1, color: AppColors.border),
-          _InfoRow(
+          _InfoRow(icon: Icons.mail_outline, label: 'Email', value: email),
+          const Divider(height: 1, color: AppColors.border),
+          const _InfoRow(
             icon: Icons.phone_outlined,
             label: 'Phone',
-            value: '+966501234567',
+            value: '-',
           ),
-          Divider(height: 1, color: AppColors.border),
-          _InfoRow(
+          const Divider(height: 1, color: AppColors.border),
+          const _InfoRow(
             icon: Icons.business_outlined,
             label: 'Company',
-            value: 'شركة الخدمات الميدانية',
+            value: '-',
           ),
         ],
       ),
@@ -194,23 +207,24 @@ class _InfoRow extends StatelessWidget {
         children: [
           Icon(icon, color: AppColors.mutedText),
           const SizedBox(width: 14),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  color: AppColors.mutedText,
-                  fontSize: 12,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: AppColors.mutedText,
+                    fontSize: 12,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                value,
-                textDirection: TextDirection.rtl,
-                style: const TextStyle(color: AppColors.ink, fontSize: 16),
-              ),
-            ],
+                const SizedBox(height: 3),
+                Text(
+                  value,
+                  style: const TextStyle(color: AppColors.ink, fontSize: 16),
+                ),
+              ],
+            ),
           ),
         ],
       ),

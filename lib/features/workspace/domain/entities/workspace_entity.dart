@@ -10,6 +10,7 @@ class WorkspaceEntity {
     required this.availableRoles,
     this.branchId,
     this.roleIds = const {},
+    this.rawData = const {},
   });
 
   final String id;
@@ -20,8 +21,16 @@ class WorkspaceEntity {
   final String location;
   final List<UserRole> availableRoles;
   final Map<UserRole, int> roleIds;
+  final Map<String, dynamic> rawData;
 
   int? roleIdFor(UserRole role) {
     return roleIds[role];
+  }
+
+  @override
+  String toString() {
+    return 'WorkspaceEntity(id: $id, companyId: $companyId, branchId: $branchId, '
+        'name: $name, availableRoles: $availableRoles, roleIds: $roleIds, '
+        'rawData: $rawData)';
   }
 }

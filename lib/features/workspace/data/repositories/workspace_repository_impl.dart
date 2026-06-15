@@ -39,6 +39,8 @@ class WorkspaceRepositoryImpl implements WorkspaceRepository {
     int? roleId,
   }) async {
     try {
+      // ignore: avoid_print
+      print(workspace);
       final response = await _remoteDataSource.selectWorkspace(
         companyId: workspace.companyId,
         branchId: workspace.branchId,

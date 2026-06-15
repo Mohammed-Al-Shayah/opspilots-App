@@ -40,6 +40,20 @@ abstract class TasksRemoteDataSource {
     String taskId,
     Map<String, dynamic> payload,
   );
+
+  Future<Map<String, dynamic>> uploadPhoto({
+    required String taskId,
+    required String filePath,
+    required String type,
+  });
+
+  Future<void> deletePhoto(String taskId, String photoId);
+
+  Future<Map<String, dynamic>> uploadSignature({
+    required String taskId,
+    required List<int> bytes,
+    required String clientName,
+  });
 }
 
 class TasksRemoteDataSourceImpl implements TasksRemoteDataSource {
@@ -118,5 +132,36 @@ class TasksRemoteDataSourceImpl implements TasksRemoteDataSource {
     Map<String, dynamic> payload,
   ) {
     return _apiService.addRating(taskId, payload);
+  }
+
+  @override
+  Future<Map<String, dynamic>> uploadPhoto({
+    required String taskId,
+    required String filePath,
+    required String type,
+  }) {
+    return _apiService.uploadPhoto(
+      taskId: taskId,
+      filePath: filePath,
+      type: type,
+    );
+  }
+
+  @override
+  Future<void> deletePhoto(String taskId, String photoId) {
+    return _apiService.deletePhoto(taskId, photoId);
+  }
+
+  @override
+  Future<Map<String, dynamic>> uploadSignature({
+    required String taskId,
+    required List<int> bytes,
+    required String clientName,
+  }) {
+    return _apiService.uploadSignature(
+      taskId: taskId,
+      bytes: bytes,
+      clientName: clientName,
+    );
   }
 }

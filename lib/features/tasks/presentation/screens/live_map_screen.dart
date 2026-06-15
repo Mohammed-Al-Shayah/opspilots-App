@@ -5,11 +5,26 @@ import '../../../../app/localization/app_strings.dart';
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../core/widgets/ops_header.dart';
+import '../../../live_map/domain/entities/live_map_entity.dart';
+import '../../../live_map/presentation/cubit/live_map_cubit.dart';
 import '../../../settings/presentation/cubit/language_cubit.dart';
 import '../widgets/field_bottom_nav.dart';
 
-class LiveMapScreen extends StatelessWidget {
+class LiveMapScreen extends StatefulWidget {
   const LiveMapScreen({super.key});
+
+  @override
+  State<LiveMapScreen> createState() => _LiveMapScreenState();
+}
+
+class _LiveMapScreenState extends State<LiveMapScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<LiveMapCubit>().loadLiveMap();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,73 +41,84 @@ class LiveMapScreen extends StatelessWidget {
               fallbackRoute: AppRoutes.home,
               action: OpsHeaderAction.outlined(
                 label: AppStrings.t('filter', language),
-                icon: Icons.filter_alt_outlined,
-                onPressed: () {},
+                icon: Icons.refresh,
+                onPressed: context.read<LiveMapCubit>().loadLiveMap,
               ),
             ),
-            const _MapPreview(),
+            BlocBuilder<LiveMapCubit, LiveMapState>(
+              builder: (context, state) {
+                final summary = state.summary;
+                return _MapPreview(summary: summary);
+              },
+            ),
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(24),
-                children: const [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _MetricTile(
-                          value: '1',
-                          label: 'Active',
-                          color: Color(0xFF2563EB),
+              child: BlocBuilder<LiveMapCubit, LiveMapState>(
+                builder: (context, state) {
+                  if (state.status == LiveMapStatus.loading &&
+                      state.summary == null) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (state.status == LiveMapStatus.failure) {
+                    return _MessageState(
+                      icon: Icons.error_outline,
+                      title: 'Unable to load live map',
+                      message: state.errorMessage ?? '',
+                      onRetry: context.read<LiveMapCubit>().loadLiveMap,
+                    );
+                  }
+
+                  final summary = state.summary;
+                  final employees = summary?.employees ?? const [];
+                  return RefreshIndicator(
+                    onRefresh: context.read<LiveMapCubit>().loadLiveMap,
+                    child: ListView(
+                      padding: const EdgeInsets.all(24),
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _MetricTile(
+                                value: (summary?.active ?? 0).toString(),
+                                label: 'Active',
+                                color: const Color(0xFF2563EB),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _MetricTile(
+                                value: (summary?.fieldTeam ?? 0).toString(),
+                                label: 'Field Team',
+                                color: const Color(0xFF16A34A),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: _MetricTile(
+                                value: (summary?.areas ?? 0).toString(),
+                                label: 'Areas',
+                                color: const Color(0xFF9333EA),
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: _MetricTile(
-                          value: '3',
-                          label: 'Field Team',
-                          color: Color(0xFF16A34A),
+                        const SizedBox(height: 26),
+                        const Text(
+                          'Active Field Employees',
+                          style: TextStyle(
+                            color: AppColors.ink,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: _MetricTile(
-                          value: '5',
-                          label: 'Areas',
-                          color: Color(0xFF9333EA),
-                        ),
-                      ),
-                    ],
-                  ),
-                  SizedBox(height: 26),
-                  Text(
-                    'Active Field Employees',
-                    style: TextStyle(
-                      color: AppColors.ink,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
+                        const SizedBox(height: 18),
+                        if (employees.isEmpty)
+                          const _EmptyMapState()
+                        else
+                          ...employees.map(_EmployeeLocationCard.new),
+                      ],
                     ),
-                  ),
-                  SizedBox(height: 18),
-                  _EmployeeTile(
-                    name: 'أحمد محمد',
-                    location: 'شارع الملك فهد',
-                    status: 'En Route',
-                    color: Color(0xFF3B82F6),
-                  ),
-                  SizedBox(height: 14),
-                  _EmployeeTile(
-                    name: 'خالد العلي',
-                    location: 'حي العليا',
-                    status: 'Working',
-                    color: Color(0xFF22C55E),
-                  ),
-                  SizedBox(height: 14),
-                  _EmployeeTile(
-                    name: 'محمد حسن',
-                    location: 'شارع العروبة',
-                    status: 'Arrived',
-                    color: AppColors.orange,
-                  ),
-                ],
+                  );
+                },
               ),
             ),
           ],
@@ -104,10 +130,13 @@ class LiveMapScreen extends StatelessWidget {
 }
 
 class _MapPreview extends StatelessWidget {
-  const _MapPreview();
+  const _MapPreview({required this.summary});
+
+  final LiveMapEntity? summary;
 
   @override
   Widget build(BuildContext context) {
+    final employees = summary?.employees ?? const [];
     return Container(
       height: 222,
       width: double.infinity,
@@ -120,40 +149,41 @@ class _MapPreview extends StatelessWidget {
       ),
       child: Stack(
         alignment: Alignment.center,
-        children: const [
-          Icon(Icons.location_on_outlined, color: Color(0xFF8D98A8), size: 86),
-          Positioned(
-            top: 58,
-            left: 98,
-            child: _MapPin(icon: Icons.navigation, color: Color(0xFF3B82F6)),
+        children: [
+          const Icon(
+            Icons.location_on_outlined,
+            color: Color(0xFF8D98A8),
+            size: 86,
           ),
           Positioned(
-            top: 90,
-            right: 116,
-            child: _MapPin(
-              icon: Icons.location_on_outlined,
-              color: Color(0xFF22C55E),
+            top: 52,
+            left: 92,
+            child: _Pin(
+              color: const Color(0xFF2563EB),
+              count: employees.length,
             ),
           ),
-          Positioned(
-            top: 130,
-            right: 150,
-            child: _MapPin(
-              icon: Icons.location_on_outlined,
-              color: AppColors.orange,
-            ),
+          const Positioned(
+            top: 72,
+            right: 118,
+            child: _Pin(color: Color(0xFF16A34A)),
+          ),
+          const Positioned(
+            bottom: 74,
+            right: 164,
+            child: _Pin(color: Color(0xFFFF6B21)),
           ),
           Positioned(
-            bottom: 52,
+            bottom: 54,
             child: Column(
               children: [
-                Text(
-                  'Map View',
+                const Text(
+                  'Map overview',
                   style: TextStyle(color: AppColors.mutedText, fontSize: 18),
                 ),
                 Text(
-                  'Real-time tracking',
-                  style: TextStyle(color: AppColors.mutedText),
+                  '${employees.length} live locations',
+                  style: const TextStyle(color: AppColors.mutedText),
                 ),
               ],
             ),
@@ -164,18 +194,38 @@ class _MapPreview extends StatelessWidget {
   }
 }
 
-class _MapPin extends StatelessWidget {
-  const _MapPin({required this.icon, required this.color});
+class _Pin extends StatelessWidget {
+  const _Pin({required this.color, this.count});
 
-  final IconData icon;
   final Color color;
+  final int? count;
 
   @override
   Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: 16,
-      backgroundColor: color,
-      child: Icon(icon, color: Colors.white, size: 17),
+    return Container(
+      width: 34,
+      height: 34,
+      decoration: BoxDecoration(
+        color: color,
+        shape: BoxShape.circle,
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x22000000),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      alignment: Alignment.center,
+      child: count == null
+          ? const Icon(Icons.place_outlined, color: Colors.white, size: 18)
+          : Text(
+              count.toString(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
     );
   }
 }
@@ -219,22 +269,15 @@ class _MetricTile extends StatelessWidget {
   }
 }
 
-class _EmployeeTile extends StatelessWidget {
-  const _EmployeeTile({
-    required this.name,
-    required this.location,
-    required this.status,
-    required this.color,
-  });
+class _EmployeeLocationCard extends StatelessWidget {
+  const _EmployeeLocationCard(this.employee);
 
-  final String name;
-  final String location;
-  final String status;
-  final Color color;
+  final FieldEmployeeLocationEntity employee;
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -243,52 +286,155 @@ class _EmployeeTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          CircleAvatar(
+          const CircleAvatar(
             radius: 24,
-            backgroundColor: color.withValues(alpha: 0.14),
-            child: Icon(Icons.groups_outlined, color: color),
+            backgroundColor: Color(0xFFEFF6FF),
+            child: Icon(Icons.groups_outlined, color: Color(0xFF2563EB)),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  name,
-                  textDirection: TextDirection.rtl,
+                  employee.name.isEmpty ? 'Field employee' : employee.name,
                   style: const TextStyle(
                     color: AppColors.ink,
-                    fontSize: 17,
+                    fontSize: 16,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.location_on_outlined,
-                      size: 14,
-                      color: AppColors.mutedText,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      location,
-                      textDirection: TextDirection.rtl,
-                      style: const TextStyle(color: AppColors.mutedText),
-                    ),
-                  ],
+                const SizedBox(height: 4),
+                Text(
+                  employee.locationName.isEmpty
+                      ? _coordinates(employee)
+                      : employee.locationName,
+                  style: const TextStyle(color: AppColors.mutedText),
                 ),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(999),
+          if (employee.status.isNotEmpty) _StatusBadge(employee.status),
+        ],
+      ),
+    );
+  }
+
+  String _coordinates(FieldEmployeeLocationEntity employee) {
+    final lat = employee.latitude;
+    final lng = employee.longitude;
+    if (lat == null || lng == null) {
+      return 'Location unavailable';
+    }
+    return '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}';
+  }
+}
+
+class _StatusBadge extends StatelessWidget {
+  const _StatusBadge(this.status);
+
+  final String status;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        status.replaceAll('_', ' '),
+        style: const TextStyle(
+          color: Color(0xFF2563EB),
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyMapState extends StatelessWidget {
+  const _EmptyMapState();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _MessageCard(
+      icon: Icons.groups_outlined,
+      title: 'No live employee locations',
+      message: 'No employees are reporting locations right now.',
+    );
+  }
+}
+
+class _MessageState extends StatelessWidget {
+  const _MessageState({
+    required this.icon,
+    required this.title,
+    required this.message,
+    required this.onRetry,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        _MessageCard(icon: icon, title: title, message: message),
+        const SizedBox(height: 16),
+        ElevatedButton(onPressed: onRetry, child: const Text('Retry')),
+      ],
+    );
+  }
+}
+
+class _MessageCard extends StatelessWidget {
+  const _MessageCard({
+    required this.icon,
+    required this.title,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 42, horizontal: 18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: const Color(0xFFCBD5E1), size: 46),
+          const SizedBox(height: 14),
+          Text(
+            title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: AppColors.ink,
+              fontWeight: FontWeight.w800,
             ),
-            child: Text(status, style: TextStyle(color: color, fontSize: 12)),
           ),
+          if (message.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.mutedText),
+            ),
+          ],
         ],
       ),
     );

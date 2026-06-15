@@ -128,6 +128,48 @@ class TasksRepositoryImpl implements TasksRepository {
     return _postAction(() => _remoteDataSource.addRating(taskId, payload));
   }
 
+  @override
+  Future<AppResult<void>> uploadPhoto({
+    required String taskId,
+    required String filePath,
+    required String type,
+  }) {
+    return _postAction(
+      () => _remoteDataSource.uploadPhoto(
+        taskId: taskId,
+        filePath: filePath,
+        type: type,
+      ),
+    );
+  }
+
+  @override
+  Future<AppResult<void>> deletePhoto(String taskId, String photoId) async {
+    try {
+      await _remoteDataSource.deletePhoto(taskId, photoId);
+      return AppResult.success(null);
+    } on AppFailure catch (failure) {
+      return AppResult.failure(failure);
+    } on Object catch (error) {
+      return AppResult.failure(ParsingFailure(error.toString()));
+    }
+  }
+
+  @override
+  Future<AppResult<void>> uploadSignature({
+    required String taskId,
+    required List<int> bytes,
+    required String clientName,
+  }) {
+    return _postAction(
+      () => _remoteDataSource.uploadSignature(
+        taskId: taskId,
+        bytes: bytes,
+        clientName: clientName,
+      ),
+    );
+  }
+
   Future<AppResult<void>> _postAction(
     Future<Map<String, dynamic>> Function() request,
   ) async {

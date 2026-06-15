@@ -1,7 +1,13 @@
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter/rendering.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../../app/router/app_routes.dart';
 import '../../../../app/router/navigation_extensions.dart';
@@ -387,7 +393,7 @@ class _TaskCheckInScreenState extends State<TaskCheckInScreen> {
   }
 }
 
-class TaskPhotoUploadScreen extends StatelessWidget {
+class TaskPhotoUploadScreen extends StatefulWidget {
   const TaskPhotoUploadScreen.before({super.key})
     : title = 'Before Photos',
       fallbackRoute = AppRoutes.taskCheckIn,
@@ -403,11 +409,48 @@ class TaskPhotoUploadScreen extends StatelessWidget {
   final String nextRoute;
 
   @override
+  State<TaskPhotoUploadScreen> createState() => _TaskPhotoUploadScreenState();
+}
+
+class _TaskPhotoUploadScreenState extends State<TaskPhotoUploadScreen> {
+  final _picker = ImagePicker();
+  final _photos = <XFile>[];
+  bool _uploading = false;
+
+  String get _type =>
+      widget.title.toLowerCase().startsWith('before') ? 'before' : 'after';
+
+  Future<void> _pick(ImageSource source) async {
+    if (_uploading) {
+      return;
+    }
+    final picked = await _picker.pickImage(source: source, imageQuality: 82);
+    if (picked == null || !mounted) {
+      return;
+    }
+
+    setState(() => _uploading = true);
+    final uploaded = await context.read<TasksCubit>().uploadSelectedTaskPhoto(
+      filePath: picked.path,
+      type: _type,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _uploading = false;
+      if (uploaded) {
+        _photos.add(picked);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return _WorkflowScaffold(
-      title: title,
-      subtitle: 'Upload at least 2 photos (2/2)',
-      fallbackRoute: fallbackRoute,
+      title: widget.title,
+      subtitle: 'Upload at least 2 photos (${_photos.length}/2)',
+      fallbackRoute: widget.fallbackRoute,
       child: ListView(
         padding: const EdgeInsets.all(24),
         children: [
@@ -416,36 +459,50 @@ class TaskPhotoUploadScreen extends StatelessWidget {
             decoration: _cardDecoration(),
             child: Column(
               children: [
-                Row(
-                  children: const [
-                    _PhotoThumb(),
-                    SizedBox(width: 12),
-                    _PhotoThumb(),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final photo in _photos)
+                      _PhotoThumb(filePath: photo.path),
+                    for (var i = _photos.length; i < 2; i++)
+                      const _PhotoThumb(),
                   ],
                 ),
                 const SizedBox(height: 40),
                 Row(
-                  children: const [
+                  children: [
                     Expanded(
                       child: _UploadBox(
                         icon: Icons.camera_alt_outlined,
                         label: 'Take Photo',
+                        onTap: () => _pick(ImageSource.camera),
                       ),
                     ),
-                    SizedBox(width: 12),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: _UploadBox(
                         icon: Icons.upload_outlined,
                         label: 'Choose from Gallery',
+                        onTap: () => _pick(ImageSource.gallery),
                       ),
                     ),
                   ],
                 ),
+                if (_uploading) ...[
+                  const SizedBox(height: 18),
+                  const LinearProgressIndicator(minHeight: 2),
+                ],
               ],
             ),
           ),
           const SizedBox(height: 26),
-          _PrimaryButton(label: 'Next', onPressed: () => context.go(nextRoute)),
+          _PrimaryButton(
+            label: 'Next',
+            onPressed: _photos.length < 2 || _uploading
+                ? null
+                : () => context.go(widget.nextRoute),
+          ),
         ],
       ),
     );
@@ -886,12 +943,64 @@ class CompleteTaskScreen extends StatelessWidget {
   }
 }
 
-class ClientSignatureScreen extends StatelessWidget {
+class ClientSignatureScreen extends StatefulWidget {
   const ClientSignatureScreen({super.key});
+
+  @override
+  State<ClientSignatureScreen> createState() => _ClientSignatureScreenState();
+}
+
+class _ClientSignatureScreenState extends State<ClientSignatureScreen> {
+  final _signatureKey = GlobalKey();
+  final _points = <Offset?>[];
+  bool _uploading = false;
+
+  void _clear() {
+    setState(_points.clear);
+  }
+
+  Future<void> _uploadSignature(String clientName) async {
+    if (_points.whereType<Offset>().isEmpty || _uploading) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Client signature is required.')),
+      );
+      return;
+    }
+
+    setState(() => _uploading = true);
+    final bytes = await _signatureBytes();
+    if (bytes == null || !mounted) {
+      setState(() => _uploading = false);
+      return;
+    }
+    final uploaded = await context
+        .read<TasksCubit>()
+        .uploadSelectedTaskSignature(bytes: bytes, clientName: clientName);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _uploading = false);
+    if (uploaded) {
+      context.go(AppRoutes.rateService);
+    }
+  }
+
+  Future<Uint8List?> _signatureBytes() async {
+    final boundary = _signatureKey.currentContext?.findRenderObject();
+    if (boundary is! RenderRepaintBoundary) {
+      return null;
+    }
+    final image = await boundary.toImage(pixelRatio: 3);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    return byteData?.buffer.asUint8List();
+  }
 
   @override
   Widget build(BuildContext context) {
     final task = context.watch<TasksCubit>().state.selectedTask;
+    final clientName = task?.client.isNotEmpty == true
+        ? task!.client
+        : 'Client unavailable';
     return _WorkflowScaffold(
       title: 'Client Signature',
       fallbackRoute: AppRoutes.afterPhotos,
@@ -909,44 +1018,82 @@ class ClientSignatureScreen extends StatelessWidget {
                   style: TextStyle(color: AppColors.ink),
                 ),
                 const SizedBox(height: 18),
-                Text(
-                  task?.client.isNotEmpty == true
-                      ? task!.client
-                      : 'Client unavailable',
-                  style: const TextStyle(color: AppColors.ink),
-                ),
+                Text(clientName, style: const TextStyle(color: AppColors.ink)),
                 const SizedBox(height: 46),
                 const Text('Sign here', style: TextStyle(color: AppColors.ink)),
                 const SizedBox(height: 8),
-                Container(
-                  height: 192,
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: const Color(0xFFD1D5DB),
-                      style: BorderStyle.solid,
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'Signature pending',
-                      style: TextStyle(color: AppColors.mutedText),
+                RepaintBoundary(
+                  key: _signatureKey,
+                  child: GestureDetector(
+                    onPanStart: (details) =>
+                        setState(() => _points.add(details.localPosition)),
+                    onPanUpdate: (details) =>
+                        setState(() => _points.add(details.localPosition)),
+                    onPanEnd: (_) => setState(() => _points.add(null)),
+                    child: Container(
+                      height: 192,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: const Color(0xFFD1D5DB),
+                          style: BorderStyle.solid,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: CustomPaint(
+                        painter: _SignaturePainter(_points),
+                        child: Center(
+                          child: _points.whereType<Offset>().isEmpty
+                              ? const Text(
+                                  'Draw signature here',
+                                  style: TextStyle(color: AppColors.mutedText),
+                                )
+                              : const SizedBox.expand(),
+                        ),
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 40),
-                const _SecondaryButton(label: 'Clear', onPressed: null),
+                _SecondaryButton(label: 'Clear', onPressed: _clear),
               ],
             ),
           ),
           const SizedBox(height: 26),
           _PrimaryButton(
-            label: 'Next',
-            onPressed: () => context.go(AppRoutes.rateService),
+            label: _uploading ? 'Uploading...' : 'Next',
+            onPressed: _uploading ? null : () => _uploadSignature(clientName),
           ),
         ],
       ),
     );
+  }
+}
+
+class _SignaturePainter extends CustomPainter {
+  const _SignaturePainter(this.points);
+
+  final List<Offset?> points;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppColors.ink
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    for (var index = 0; index < points.length - 1; index++) {
+      final current = points[index];
+      final next = points[index + 1];
+      if (current != null && next != null) {
+        canvas.drawLine(current, next, paint);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _SignaturePainter oldDelegate) {
+    return oldDelegate.points != points;
   }
 }
 
@@ -1993,10 +2140,13 @@ class _SmallPill extends StatelessWidget {
 }
 
 class _PhotoThumb extends StatelessWidget {
-  const _PhotoThumb();
+  const _PhotoThumb({this.filePath});
+
+  final String? filePath;
 
   @override
   Widget build(BuildContext context) {
+    final path = filePath;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -2007,25 +2157,29 @@ class _PhotoThumb extends StatelessWidget {
             color: const Color(0xFFF3F4F6),
             borderRadius: BorderRadius.circular(10),
           ),
-          child: const Icon(
-            Icons.image_outlined,
-            color: Color(0xFF9CA3AF),
-            size: 34,
-          ),
+          clipBehavior: Clip.antiAlias,
+          child: path == null
+              ? const Icon(
+                  Icons.image_outlined,
+                  color: Color(0xFF9CA3AF),
+                  size: 34,
+                )
+              : Image.file(File(path), fit: BoxFit.cover),
         ),
-        Positioned(
-          top: -6,
-          right: -6,
-          child: Container(
-            width: 24,
-            height: 24,
-            decoration: const BoxDecoration(
-              color: Color(0xFFFF3045),
-              shape: BoxShape.circle,
+        if (path != null)
+          Positioned(
+            top: -6,
+            right: -6,
+            child: Container(
+              width: 24,
+              height: 24,
+              decoration: const BoxDecoration(
+                color: Color(0xFFFF3045),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.check, color: Colors.white, size: 16),
             ),
-            child: const Icon(Icons.close, color: Colors.white, size: 16),
           ),
-        ),
       ],
     );
   }
@@ -2036,34 +2190,40 @@ class _UploadBox extends StatelessWidget {
     required this.icon,
     required this.label,
     this.compact = false,
+    this.onTap,
   });
 
   final IconData icon;
   final String label;
   final bool compact;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: compact ? 36 : 96,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: AppColors.border, width: 1.3),
-        borderRadius: BorderRadius.circular(9),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: AppColors.ink, size: 18),
-          const SizedBox(width: 10),
-          Flexible(
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.ink, fontSize: 15),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(9),
+      child: Container(
+        height: compact ? 36 : 96,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: AppColors.border, width: 1.3),
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: AppColors.ink, size: 18),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.ink, fontSize: 15),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

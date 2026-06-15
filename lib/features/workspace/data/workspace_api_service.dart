@@ -18,6 +18,11 @@ class WorkspaceApiService {
 
   Future<List<dynamic>> getWorkspaces() async {
     try {
+      final loginWorkspaces = await _tokenStore.readLoginWorkspaces();
+      if (loginWorkspaces.isNotEmpty) {
+        return loginWorkspaces;
+      }
+
       final response = await _dioClient.instance.get<Object?>(
         ApiPaths.workspaces,
       );
@@ -48,16 +53,21 @@ class WorkspaceApiService {
   }) async {
     try {
       await _tokenStore.clearWorkspace();
+      final loginToken = await _tokenStore.readAuthToken();
+      final requestBody = {
+        'company_id': companyId,
+        'branch_id': branchId,
+        // ignore: use_null_aware_elements
+        if (roleId != null) 'role_id': roleId,
+        'role': role.apiValue,
+        'role_key': role.apiValue,
+      };
       final response = await _dioClient.instance.post<Object?>(
         ApiPaths.selectWorkspace,
-        data: {
-          'company_id': companyId,
-          'branch_id': branchId,
-          // ignore: use_null_aware_elements
-          if (roleId case final value?) 'role_id': value,
-          'role': role.apiValue,
-          'role_key': role.apiValue,
-        },
+        data: requestBody,
+        options: loginToken == null || loginToken.isEmpty
+            ? null
+            : Options(headers: {'Authorization': 'Bearer $loginToken'}),
       );
       final root = ApiResponseReader.asMap(response.data);
       final data = ApiResponseReader.asMap(root['data'] ?? root);
@@ -76,7 +86,11 @@ class WorkspaceApiService {
       if (token != null) {
         await _tokenStore.saveWorkspaceToken(token);
       }
-      await _tokenStore.saveWorkspaceId(companyId.toString());
+      final workspaceId =
+          data['workspace_id']?.toString() ??
+          data['id']?.toString() ??
+          companyId.toString();
+      await _tokenStore.saveWorkspaceId(workspaceId);
       return data;
     } on DioException catch (exception) {
       throw _dioClient.mapFailure(exception);

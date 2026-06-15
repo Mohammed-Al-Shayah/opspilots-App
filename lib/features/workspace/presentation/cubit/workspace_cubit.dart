@@ -127,13 +127,19 @@ class WorkspaceCubit extends Cubit<WorkspaceState> {
       );
       return false;
     }
+    final roleId = workspace.roleIdFor(role);
+    if (roleId == null) {
+      emit(
+        state.copyWith(
+          status: WorkspaceStatus.loaded,
+          errorMessage: 'Selected workspace response does not include role_id.',
+        ),
+      );
+      return false;
+    }
 
     final result = await _selectWorkspaceUseCase(
-      SelectWorkspaceParams(
-        workspace: workspace,
-        role: role,
-        roleId: workspace.roleIdFor(role),
-      ),
+      SelectWorkspaceParams(workspace: workspace, role: role, roleId: roleId),
     );
     return result.when(
       success: (_) {

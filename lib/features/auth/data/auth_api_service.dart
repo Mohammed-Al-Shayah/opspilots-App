@@ -42,6 +42,9 @@ class AuthApiService {
       );
       final result = _parseLogin(response.data, emailOrPhone);
       await _tokenStore.saveAuthToken(result.token);
+      await _tokenStore.saveLoginWorkspaces(
+        _parseLoginWorkspaces(response.data),
+      );
       await _tokenStore.clearWorkspace();
       return result;
     } on DioException catch (exception) {
@@ -124,5 +127,11 @@ class AuthApiService {
         'email': email,
       }, fallbackEmail: fallbackEmail),
     );
+  }
+
+  List<dynamic> _parseLoginWorkspaces(Object? body) {
+    final root = ApiResponseReader.asMap(body);
+    final data = ApiResponseReader.asMap(root['data']);
+    return ApiResponseReader.asList(data['workspaces']);
   }
 }

@@ -12,6 +12,7 @@ class WorkspaceModel extends WorkspaceEntity {
     required super.availableRoles,
     super.branchId,
     super.roleIds,
+    super.rawData,
   });
 
   factory WorkspaceModel.fromJson(Map<String, dynamic> json) {
@@ -38,7 +39,7 @@ class WorkspaceModel extends WorkspaceEntity {
     return WorkspaceModel(
       id: (json['id'] ?? companyId).toString(),
       companyId: companyId,
-      branchId: _intValue(json['branch_id']) ?? _intValue(branch['id']),
+      branchId: _branchId(json['branch_id'] ?? branch['id']),
       name:
           json['name']?.toString() ??
           company['name']?.toString() ??
@@ -54,6 +55,7 @@ class WorkspaceModel extends WorkspaceEntity {
           '',
       availableRoles: roles.keys.toList(),
       roleIds: roles,
+      rawData: Map<String, dynamic>.from(json),
     );
   }
 
@@ -80,8 +82,10 @@ class WorkspaceModel extends WorkspaceEntity {
             item,
       );
       if (role != null) {
-        roles[role] =
-            _intValue(roleMap['id'] ?? roleMap['role_id']) ?? role.index + 1;
+        final roleId = _intValue(roleMap['id'] ?? roleMap['role_id']);
+        if (roleId != null) {
+          roles[role] = roleId;
+        }
       }
     }
 
@@ -95,9 +99,15 @@ class WorkspaceModel extends WorkspaceEntity {
             membership['role_name'],
       );
       if (role != null) {
-        roles[role] =
-            _intValue(json['role_id'] ?? membership['role_id']) ??
-            role.index + 1;
+        final roleMap = ApiResponseReader.asMap(json['role']).isNotEmpty
+            ? ApiResponseReader.asMap(json['role'])
+            : ApiResponseReader.asMap(membership['role']);
+        final roleId = _intValue(
+          json['role_id'] ?? membership['role_id'] ?? roleMap['id'],
+        );
+        if (roleId != null) {
+          roles[role] = roleId;
+        }
       }
     }
 
@@ -105,6 +115,15 @@ class WorkspaceModel extends WorkspaceEntity {
   }
 
   static UserRole? _roleFromValue(Object? value) {
+    final valueMap = ApiResponseReader.asMap(value);
+    if (valueMap.isNotEmpty) {
+      return _roleFromValue(
+        valueMap['key'] ??
+            valueMap['slug'] ??
+            valueMap['name'] ??
+            valueMap['label'],
+      );
+    }
     final role = value.toString().toLowerCase().replaceAll('-', '_');
     if (role.contains('field') || role.contains('employee')) {
       return UserRole.fieldEmployee;
@@ -119,6 +138,14 @@ class WorkspaceModel extends WorkspaceEntity {
       return UserRole.client;
     }
     return null;
+  }
+
+  static int? _branchId(Object? value) {
+    final id = _intValue(value);
+    if (id == null || id == 0) {
+      return null;
+    }
+    return id;
   }
 
   static int? _intValue(Object? value) {

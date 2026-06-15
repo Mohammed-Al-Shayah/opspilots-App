@@ -103,6 +103,56 @@ class TasksApiService {
     return _postMap(ApiPaths.taskRating(taskId), payload);
   }
 
+  Future<Map<String, dynamic>> uploadPhoto({
+    required String taskId,
+    required String filePath,
+    required String type,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'type': type,
+        'photo': await MultipartFile.fromFile(filePath),
+      });
+      final response = await _dioClient.instance.post<Object?>(
+        ApiPaths.taskPhotosUpload(taskId),
+        data: formData,
+      );
+      return ApiResponseReader.asMap(ApiResponseReader.data(response.data));
+    } on DioException catch (exception) {
+      throw _dioClient.mapFailure(exception);
+    }
+  }
+
+  Future<void> deletePhoto(String taskId, String photoId) async {
+    try {
+      await _dioClient.instance.delete<Object?>(
+        ApiPaths.taskPhoto(taskId, photoId),
+      );
+    } on DioException catch (exception) {
+      throw _dioClient.mapFailure(exception);
+    }
+  }
+
+  Future<Map<String, dynamic>> uploadSignature({
+    required String taskId,
+    required List<int> bytes,
+    required String clientName,
+  }) async {
+    try {
+      final formData = FormData.fromMap({
+        'client_name': clientName,
+        'signature': MultipartFile.fromBytes(bytes, filename: 'signature.png'),
+      });
+      final response = await _dioClient.instance.post<Object?>(
+        ApiPaths.taskSignatureUpload(taskId),
+        data: formData,
+      );
+      return ApiResponseReader.asMap(ApiResponseReader.data(response.data));
+    } on DioException catch (exception) {
+      throw _dioClient.mapFailure(exception);
+    }
+  }
+
   Future<List<dynamic>> _getList(String path) async {
     try {
       final response = await _dioClient.instance.get<Object?>(path);

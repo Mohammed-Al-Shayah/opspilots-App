@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import '../features/attendance/presentation/cubit/attendance_cubit.dart';
+import '../features/chat/presentation/cubit/chat_cubit.dart';
 import '../features/home/presentation/cubit/field_home_cubit.dart';
+import '../features/live_map/presentation/cubit/live_map_cubit.dart';
+import '../features/operations/presentation/cubit/operations_cubit.dart';
 import '../features/role/presentation/cubit/role_cubit.dart';
 import '../features/auth/presentation/cubit/auth_cubit.dart';
 import '../features/settings/presentation/cubit/language_cubit.dart';
@@ -31,6 +34,9 @@ class OpsPilotApp extends StatelessWidget {
         BlocProvider(create: (_) => sl<TasksCubit>()),
         BlocProvider(create: (_) => sl<AttendanceCubit>()),
         BlocProvider(create: (_) => sl<NotificationsCubit>()),
+        BlocProvider(create: (_) => sl<OperationsCubit>()),
+        BlocProvider(create: (_) => sl<LiveMapCubit>()),
+        BlocProvider(create: (_) => sl<ChatCubit>()),
       ],
       child: BlocBuilder<LanguageCubit, LanguageState>(
         builder: (context, languageState) {

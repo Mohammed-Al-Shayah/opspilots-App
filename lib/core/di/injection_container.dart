@@ -16,11 +16,25 @@ import '../../features/auth/domain/usecases/login_usecase.dart';
 import '../../features/auth/domain/usecases/logout_usecase.dart';
 import '../../features/auth/domain/usecases/set_password_usecase.dart';
 import '../../features/auth/presentation/cubit/auth_cubit.dart';
+import '../../features/chat/data/chat_api_service.dart';
+import '../../features/chat/data/datasources/chat_remote_datasource.dart';
+import '../../features/chat/data/repositories/chat_repository_impl.dart';
+import '../../features/chat/domain/repositories/chat_repository.dart';
+import '../../features/chat/domain/usecases/get_conversations_usecase.dart';
+import '../../features/chat/domain/usecases/get_messages_usecase.dart';
+import '../../features/chat/domain/usecases/send_message_usecase.dart';
+import '../../features/chat/presentation/cubit/chat_cubit.dart';
 import '../../features/home/data/repositories/field_home_repository_impl.dart';
 import '../../features/home/data/datasources/field_home_remote_datasource.dart';
 import '../../features/home/domain/repositories/field_home_repository.dart';
 import '../../features/home/domain/usecases/get_field_home_summary_usecase.dart';
 import '../../features/home/presentation/cubit/field_home_cubit.dart';
+import '../../features/live_map/data/datasources/live_map_remote_datasource.dart';
+import '../../features/live_map/data/live_map_api_service.dart';
+import '../../features/live_map/data/repositories/live_map_repository_impl.dart';
+import '../../features/live_map/domain/repositories/live_map_repository.dart';
+import '../../features/live_map/domain/usecases/get_live_map_usecase.dart';
+import '../../features/live_map/presentation/cubit/live_map_cubit.dart';
 import '../../features/operations/data/dashboard_api_service.dart';
 import '../../features/operations/data/datasources/dashboard_remote_datasource.dart';
 import '../../features/operations/data/repositories/dashboard_repository_impl.dart';
@@ -28,6 +42,7 @@ import '../../features/operations/domain/repositories/dashboard_repository.dart'
 import '../../features/operations/domain/usecases/export_reports_usecase.dart';
 import '../../features/operations/domain/usecases/get_dashboard_usecase.dart';
 import '../../features/operations/domain/usecases/get_reports_overview_usecase.dart';
+import '../../features/operations/presentation/cubit/operations_cubit.dart';
 import '../../features/settings/data/repositories/notifications_repository_impl.dart';
 import '../../features/settings/data/notifications_api_service.dart';
 import '../../features/settings/data/datasources/notifications_remote_datasource.dart';
@@ -55,6 +70,7 @@ import '../../features/tasks/domain/usecases/get_tasks_usecase.dart';
 import '../../features/tasks/domain/usecases/get_task_details_usecase.dart';
 import '../../features/tasks/domain/usecases/submit_task_workflow_usecase.dart';
 import '../../features/tasks/domain/usecases/transition_task_usecase.dart';
+import '../../features/tasks/domain/usecases/upload_task_assets_usecase.dart';
 import '../../features/tasks/presentation/cubit/tasks_cubit.dart';
 import '../../features/workspace/data/workspace_api_service.dart';
 import '../../features/workspace/data/datasources/workspace_remote_datasource.dart';
@@ -229,6 +245,21 @@ Future<void> configureDependencies() async {
       () => SubmitTaskWorkflowUseCase(sl<TasksRepository>()),
     );
   }
+  if (!sl.isRegistered<UploadTaskPhotoUseCase>()) {
+    sl.registerLazySingleton<UploadTaskPhotoUseCase>(
+      () => UploadTaskPhotoUseCase(sl<TasksRepository>()),
+    );
+  }
+  if (!sl.isRegistered<DeleteTaskPhotoUseCase>()) {
+    sl.registerLazySingleton<DeleteTaskPhotoUseCase>(
+      () => DeleteTaskPhotoUseCase(sl<TasksRepository>()),
+    );
+  }
+  if (!sl.isRegistered<UploadTaskSignatureUseCase>()) {
+    sl.registerLazySingleton<UploadTaskSignatureUseCase>(
+      () => UploadTaskSignatureUseCase(sl<TasksRepository>()),
+    );
+  }
   if (!sl.isRegistered<AttendanceApiService>()) {
     sl.registerLazySingleton<AttendanceApiService>(
       () => AttendanceApiService(dioClient: sl<DioClient>()),
@@ -356,6 +387,68 @@ Future<void> configureDependencies() async {
       () => MarkNotificationReadUseCase(sl<NotificationsRepository>()),
     );
   }
+  if (!sl.isRegistered<LiveMapApiService>()) {
+    sl.registerLazySingleton<LiveMapApiService>(
+      () => LiveMapApiService(dioClient: sl<DioClient>()),
+    );
+  }
+  if (!sl.isRegistered<LiveMapRemoteDataSource>()) {
+    sl.registerLazySingleton<LiveMapRemoteDataSource>(
+      () => LiveMapRemoteDataSourceImpl(apiService: sl<LiveMapApiService>()),
+    );
+  }
+  if (!sl.isRegistered<LiveMapRepository>()) {
+    sl.registerLazySingleton<LiveMapRepository>(
+      () => LiveMapRepositoryImpl(
+        remoteDataSource: sl<LiveMapRemoteDataSource>(),
+      ),
+    );
+  }
+  if (!sl.isRegistered<GetLiveMapUseCase>()) {
+    sl.registerLazySingleton<GetLiveMapUseCase>(
+      () => GetLiveMapUseCase(sl<LiveMapRepository>()),
+    );
+  }
+  if (!sl.isRegistered<ChatApiService>()) {
+    sl.registerLazySingleton<ChatApiService>(
+      () => ChatApiService(dioClient: sl<DioClient>()),
+    );
+  }
+  if (!sl.isRegistered<ChatRemoteDataSource>()) {
+    sl.registerLazySingleton<ChatRemoteDataSource>(
+      () => ChatRemoteDataSourceImpl(apiService: sl<ChatApiService>()),
+    );
+  }
+  if (!sl.isRegistered<ChatRepository>()) {
+    sl.registerLazySingleton<ChatRepository>(
+      () => ChatRepositoryImpl(remoteDataSource: sl<ChatRemoteDataSource>()),
+    );
+  }
+  if (!sl.isRegistered<GetConversationsUseCase>()) {
+    sl.registerLazySingleton<GetConversationsUseCase>(
+      () => GetConversationsUseCase(sl<ChatRepository>()),
+    );
+  }
+  if (!sl.isRegistered<GetMessagesUseCase>()) {
+    sl.registerLazySingleton<GetMessagesUseCase>(
+      () => GetMessagesUseCase(sl<ChatRepository>()),
+    );
+  }
+  if (!sl.isRegistered<SendMessageUseCase>()) {
+    sl.registerLazySingleton<SendMessageUseCase>(
+      () => SendMessageUseCase(sl<ChatRepository>()),
+    );
+  }
+  if (!sl.isRegistered<OperationsCubit>()) {
+    sl.registerFactory<OperationsCubit>(
+      () => OperationsCubit(
+        getDashboardUseCase: sl<GetDashboardUseCase>(),
+        getReportsOverviewUseCase: sl<GetReportsOverviewUseCase>(),
+        exportAttendanceCsvUseCase: sl<ExportAttendanceCsvUseCase>(),
+        exportAuditLogsCsvUseCase: sl<ExportAuditLogsCsvUseCase>(),
+      ),
+    );
+  }
   if (!sl.isRegistered<AuthCubit>()) {
     sl.registerFactory<AuthCubit>(
       () => AuthCubit(
@@ -398,6 +491,9 @@ Future<void> configureDependencies() async {
         getTaskDetailsUseCase: sl<GetTaskDetailsUseCase>(),
         transitionTaskUseCase: sl<TransitionTaskUseCase>(),
         submitTaskWorkflowUseCase: sl<SubmitTaskWorkflowUseCase>(),
+        uploadTaskPhotoUseCase: sl<UploadTaskPhotoUseCase>(),
+        deleteTaskPhotoUseCase: sl<DeleteTaskPhotoUseCase>(),
+        uploadTaskSignatureUseCase: sl<UploadTaskSignatureUseCase>(),
       ),
     );
   }
@@ -416,6 +512,20 @@ Future<void> configureDependencies() async {
         getNotificationsUseCase: sl<GetNotificationsUseCase>(),
         markAllReadUseCase: sl<MarkAllNotificationsReadUseCase>(),
         markReadUseCase: sl<MarkNotificationReadUseCase>(),
+      ),
+    );
+  }
+  if (!sl.isRegistered<LiveMapCubit>()) {
+    sl.registerFactory<LiveMapCubit>(
+      () => LiveMapCubit(getLiveMapUseCase: sl<GetLiveMapUseCase>()),
+    );
+  }
+  if (!sl.isRegistered<ChatCubit>()) {
+    sl.registerFactory<ChatCubit>(
+      () => ChatCubit(
+        getConversationsUseCase: sl<GetConversationsUseCase>(),
+        getMessagesUseCase: sl<GetMessagesUseCase>(),
+        sendMessageUseCase: sl<SendMessageUseCase>(),
       ),
     );
   }
